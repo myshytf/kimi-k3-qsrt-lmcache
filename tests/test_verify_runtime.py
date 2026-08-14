@@ -17,7 +17,8 @@ class FixtureHandler(BaseHTTPRequestHandler):
     lmcache_healthy = True
     non_cuda_contexts = 8
     gpu_contexts = 0
-    include_gpu_contexts = True
+    gpu_context_field: str | None = "registered_gpu_ids"
+    legacy_gpu_contexts: int | None = None
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -43,9 +44,13 @@ class FixtureHandler(BaseHTTPRequestHandler):
                             range(self.non_cuda_contexts)
                         ),
                     }
-                if self.include_gpu_contexts:
-                    payload["registered_kv_cache_ids"] = list(
+                if self.gpu_context_field is not None:
+                    payload[self.gpu_context_field] = list(
                         range(self.gpu_contexts)
+                    )
+                if self.legacy_gpu_contexts is not None:
+                    payload["registered_kv_cache_ids"] = list(
+                        range(self.legacy_gpu_contexts)
                     )
                 self._json(200, payload)
             else:
@@ -76,7 +81,8 @@ class RuntimeVerificationTests(unittest.TestCase):
         *,
         non_cuda_contexts: int = 8,
         gpu_contexts: int = 0,
-        include_gpu_contexts: bool = True,
+        gpu_context_field: str | None = "registered_gpu_ids",
+        legacy_gpu_contexts: int | None = None,
     ) -> subprocess.CompletedProcess[str]:
         handler = type(
             "ConfiguredFixtureHandler",
@@ -85,7 +91,8 @@ class RuntimeVerificationTests(unittest.TestCase):
                 "lmcache_healthy": lmcache_healthy,
                 "non_cuda_contexts": non_cuda_contexts,
                 "gpu_contexts": gpu_contexts,
-                "include_gpu_contexts": include_gpu_contexts,
+                "gpu_context_field": gpu_context_field,
+                "legacy_gpu_contexts": legacy_gpu_contexts,
             },
         )
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -136,8 +143,26 @@ class RuntimeVerificationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("GPU contexts=1 expected=0", result.stdout)
 
+    def test_legacy_gpu_context_alias_still_fails(self) -> None:
+        result = self._run(
+            lmcache_healthy=True,
+            gpu_context_field=None,
+            legacy_gpu_contexts=1,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("GPU contexts=1 expected=0", result.stdout)
+
+    def test_conflicting_gpu_context_fields_fail_closed(self) -> None:
+        result = self._run(
+            lmcache_healthy=True,
+            gpu_contexts=0,
+            legacy_gpu_contexts=1,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("GPU context status fields disagree", result.stdout)
+
     def test_omitted_zero_gpu_context_field_passes(self) -> None:
-        result = self._run(lmcache_healthy=True, include_gpu_contexts=False)
+        result = self._run(lmcache_healthy=True, gpu_context_field=None)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("gpu_contexts=0", result.stdout)
 

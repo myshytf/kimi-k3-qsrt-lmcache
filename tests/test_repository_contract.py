@@ -70,6 +70,12 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('--supported-transfer-mode "${K3_LMCACHE_TRANSFER_MODE}"', text)
         self.assertIn('"lmcache.mp.mp_transfer_mode":"%s"', text)
         self.assertIn('--mamba-cache-mode "${K3_MAMBA_CACHE_MODE:-align}"', text)
+        self.assertIn(
+            'K3_KV_CACHE_MEMORY_BYTES="${K3_KV_CACHE_MEMORY_BYTES:-2147483648}"',
+            text,
+        )
+        self.assertIn('env "${K3_LMCACHE_SERVER_ENV_ARGS[@]}"', text)
+        self.assertNotIn("env ${K3_LMCACHE_SERVER_ENV}", text)
 
     def test_repository_contains_no_live_credentials_or_private_host_paths(self) -> None:
         patterns = {

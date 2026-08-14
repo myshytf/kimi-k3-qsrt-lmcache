@@ -21,6 +21,7 @@ Only the latest commit on `main` is maintained. The compatibility payload itself
 - Bind API ports to a trusted network or put them behind authenticated access control.
 - Keep `.env` mode 0600 and never commit tokens.
 - Treat model files and LMCache L2 objects as sensitive if prompts or derived KV state are sensitive.
+- The engine-driven MP transport uses Python pickle over unauthenticated ZeroMQ. Keep `K3_LMCACHE_MP_HOST=127.0.0.1`, do not publish port 5555, and allow only trusted local processes to reach it; exposing it to an untrusted peer is equivalent to remote code execution.
 - Read-only source overlays reduce mutation risk but do not make an untrusted image safe.
 - Run `scripts/check_image.py` against a trusted local image before mounting overlays.
 - Review every overlay and its upstream provenance before production use.

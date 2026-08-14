@@ -47,7 +47,7 @@
       "install_path": "patchwork/serve-kimi-k3-qsrt-lmcache.sh",
       "container_path": "/usr/local/bin/serve-kimi-k3-qsrt.sh",
       "base_sha256": "3750eba742542508ca65e5d23eac5a1100c41e4672e9e6b4bdcbcf9d37706714",
-      "patched_sha256": "c29c8d015300b230ba2d970c58a052367150443921215757194ce57b1c8146d4"
+      "patched_sha256": "9769b0db9aeca1e0331dca847dc4cea52050f410dfb42117ee44d59fae09c35f"
     },
     {
       "name": "lmcache-kv-cache-group-edits",

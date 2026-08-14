@@ -100,7 +100,7 @@ export INSTANTTENSOR_MAX_FREE_MEM_USAGE="${INSTANTTENSOR_MAX_FREE_MEM_USAGE:-0.6
 export SAFETENSORS_FAST_GPU="${SAFETENSORS_FAST_GPU:-1}"
 
 K3_KV_CACHE_ARGS=()
-K3_KV_CACHE_MEMORY_BYTES="${K3_KV_CACHE_MEMORY_BYTES:-3865470566}"
+K3_KV_CACHE_MEMORY_BYTES="${K3_KV_CACHE_MEMORY_BYTES:-2147483648}"
 if [[ -n "${K3_KV_CACHE_MEMORY_BYTES}" \
   && "${K3_KV_CACHE_MEMORY_BYTES}" != "0" \
   && "${K3_KV_CACHE_MEMORY_BYTES}" != "auto" ]]; then
@@ -155,6 +155,13 @@ if [[ "${K3_ENABLE_LMCACHE:-1}" == "1" ]]; then
   # An empty CUDA_VISIBLE_DEVICES is process-local: vLLM workers still see all
   # GPUs, while the standalone LMCache server remains CPU-only.
   K3_LMCACHE_SERVER_ENV="${K3_LMCACHE_SERVER_ENV:-CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY}"
+  read -r -a K3_LMCACHE_SERVER_ENV_ARGS <<< "${K3_LMCACHE_SERVER_ENV}"
+  for assignment in "${K3_LMCACHE_SERVER_ENV_ARGS[@]}"; do
+    if [[ ! "${assignment}" =~ ^[A-Za-z_][A-Za-z0-9_]*=.*$ ]]; then
+      echo "[kimik3] Invalid K3_LMCACHE_SERVER_ENV assignment: ${assignment}" >&2
+      exit 2
+    fi
+  done
   # Stale-lock recovery timeouts for crashed readers/writers, not entry TTLs.
   K3_LMCACHE_L1_WRITE_TTL="${K3_LMCACHE_L1_WRITE_TTL:-600}"
   K3_LMCACHE_L1_READ_TTL="${K3_LMCACHE_L1_READ_TTL:-300}"
@@ -166,8 +173,7 @@ if [[ "${K3_ENABLE_LMCACHE:-1}" == "1" ]]; then
   mkdir -p "${K3_LMCACHE_DISK_PATH}"
   echo "[kimik3] Starting LMCache MP server: tcp://${K3_LMCACHE_MP_HOST}:${K3_LMCACHE_MP_PORT}, mode=${K3_LMCACHE_TRANSFER_MODE}, CPU-only server, L1=${K3_LMCACHE_L1_GB}GB init=${K3_LMCACHE_L1_INIT_GB}GB CPU RAM, L2=${K3_LMCACHE_L2_GB}GB @ ${K3_LMCACHE_DISK_PATH}, chunk=${K3_LMCACHE_CHUNK_SIZE}"
   rm -f "${K3_LMCACHE_LOG}"
-  # shellcheck disable=SC2086  # intentional list of env assignments
-  env ${K3_LMCACHE_SERVER_ENV} "${K3_LMCACHE_BIN}" server \
+  env "${K3_LMCACHE_SERVER_ENV_ARGS[@]}" "${K3_LMCACHE_BIN}" server \
     --host "${K3_LMCACHE_MP_HOST}" \
     --port "${K3_LMCACHE_MP_PORT}" \
     --supported-transfer-mode "${K3_LMCACHE_TRANSFER_MODE}" \

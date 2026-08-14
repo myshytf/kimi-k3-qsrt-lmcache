@@ -124,12 +124,30 @@ def main() -> int:
                 f"expected={args.expected_non_cuda_contexts}"
             )
 
-        # This LMCache build omits the GPU-context field entirely when there
-        # are no pointer/CUDA contexts. Treat absence as the empty set, but
-        # still validate the type and count when the field is present.
-        gpu_contexts = status.get("registered_kv_cache_ids", [])
-        if not isinstance(gpu_contexts, list):
-            raise ValueError("registered_kv_cache_ids is not a list")
+        # The target module reports the canonical `registered_gpu_ids` field.
+        # Older builds may expose `registered_kv_cache_ids`; accept that alias
+        # but fail if both fields are present and disagree. This build omits
+        # both fields when there are zero pointer/CUDA contexts.
+        canonical_gpu_contexts = status.get("registered_gpu_ids")
+        legacy_gpu_contexts = status.get("registered_kv_cache_ids")
+        for field_name, field_value in (
+            ("registered_gpu_ids", canonical_gpu_contexts),
+            ("registered_kv_cache_ids", legacy_gpu_contexts),
+        ):
+            if field_value is not None and not isinstance(field_value, list):
+                raise ValueError(f"{field_name} is not a list")
+        if (
+            canonical_gpu_contexts is not None
+            and legacy_gpu_contexts is not None
+            and canonical_gpu_contexts != legacy_gpu_contexts
+        ):
+            raise ValueError("GPU context status fields disagree")
+        if canonical_gpu_contexts is not None:
+            gpu_contexts = canonical_gpu_contexts
+        elif legacy_gpu_contexts is not None:
+            gpu_contexts = legacy_gpu_contexts
+        else:
+            gpu_contexts = []
         if len(gpu_contexts) != args.expected_gpu_contexts:
             raise ValueError(
                 f"GPU contexts={len(gpu_contexts)} "

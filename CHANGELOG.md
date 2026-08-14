@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [0.2.1] - 2026-08-14
+
+### Fixed
+
+- Runtime verification now checks LMCache's canonical `registered_gpu_ids` field, retains the legacy alias, and fails closed when both disagree.
+- Standalone launcher KV reservation now defaults to the validated 2 GiB/rank profile instead of the older 3.6 GiB value.
+- LMCache server environment assignments are validated and passed as a Bash array instead of unquoted word splitting.
+
+### Security
+
+- Documented that the unauthenticated pickle/ZeroMQ MP transport must remain loopback-only.
+
 ## [0.2.0] - 2026-08-14
 
 ### Added

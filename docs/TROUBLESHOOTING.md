@@ -139,13 +139,19 @@ The repository's narrow overlay exists specifically to avoid that uncontrolled r
 
 ## Status JSON field errors in custom scripts
 
-Build-specific `/status` responses may not contain names such as `object_count`, `registered_kv_cache_ids`, or `current_size_memory`, or may expose integers where a script assumed arrays. First print the real JSON:
+Build-specific `/status` responses may not contain names such as `object_count`, canonical `registered_gpu_ids` (legacy alias `registered_kv_cache_ids`), or `current_size_memory`, or may expose integers where a script assumed arrays. First print the real JSON:
 
 ```bash
 curl -fsS http://127.0.0.1:8088/status | python3 -m json.tool
 ```
 
+The target engine-driven module emits `registered_gpu_ids` when GPU/pointer contexts exist and may omit the field when none exist. The bundled verifier accepts the legacy alias but fails if both fields disagree.
+
 Treat a client-side `KeyError` or `TypeError` separately from server health.
+
+## Keep the MP transport on loopback
+
+The engine-driven transfer path serializes trusted local messages with Python pickle over unauthenticated ZeroMQ. Keep `K3_LMCACHE_MP_HOST=127.0.0.1` and do not publish the MP port. Do not bind it to a LAN/WAN address or allow untrusted local processes to connect; malicious pickle input can execute code in the LMCache server process.
 
 ## CUDA OOM during startup
 
