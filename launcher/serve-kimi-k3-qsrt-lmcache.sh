@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 # Modified by myshytf/kimi-k3-qsrt-lmcache on 2026-08-14.
-# Adds LMCache MP startup, hybrid-cache-safe vLLM flags, DCP8 chunk alignment,
-# runtime health gating, and configurable minimum GPU staging.
+# Adds hybrid-safe TP8/DCP8 LMCache startup and CPU-only multi-group
+# engine-driven transfer while preserving persistent L1/L2 caching.
 # Launch Kimi K3 QSRT with one full CUDA graph for each decode batch shape.
 set -euo pipefail
 
@@ -125,11 +125,12 @@ if [[ "${K3_ENABLE_DSPARK}" == 1 ]]; then
   K3_SPECULATIVE_ARGS+=(--speculative-config "${K3_SPECULATIVE_CONFIG}")
 fi
 
-# ── LMCache MP server: CPU-RAM L1 + NVMe L2, no extra persistent GPU tier ─
-# KV blocks are handed from vLLM's GPU KV manager to a standalone
-# `lmcache server` process. Its L1 tier is pinned host RAM and L2 is a
-# filesystem adapter. vLLM still keeps its configured active GPU KV working
-# set; LMCache does not reserve a second persistent GPU cache tier.
+# ── LMCache MP server: engine-driven CPU-only server + CPU-RAM L1 + NVMe L2 ──
+# GPU KV gather/scatter runs inside the existing vLLM worker CUDA contexts.
+# The standalone LMCache server sees no GPUs and therefore owns no per-GPU
+# CUDA context, IPC mapping, or staging allocation. An empty SHM name forces
+# per-transfer pickle buffers instead of pinning the entire 48 GB L1 pool in
+# every GPU worker; the 48 GB L1 capacity and persistent L2 remain unchanged.
 K3_LMCACHE_ARGS=()
 if [[ "${K3_ENABLE_LMCACHE:-1}" == "1" ]]; then
   # expandable_segments conflicts with the LMCache MP connector (proven in
@@ -149,10 +150,11 @@ if [[ "${K3_ENABLE_LMCACHE:-1}" == "1" ]]; then
   K3_LMCACHE_L2_GB="${K3_LMCACHE_L2_GB:-1200}"
   K3_LMCACHE_DISK_PATH="${K3_LMCACHE_DISK_PATH:-/lmcache/l2}"
   K3_LMCACHE_LOG="${K3_LMCACHE_LOG:-/container-tmp/lmcache_mp_server.log}"
-  # Pointer/IPC mode must be able to open each GPU.  Keep module loading lazy
-  # and cap the reusable gather/scatter staging area at one chunk; larger
-  # transfers are automatically processed in one-chunk windows.
-  K3_LMCACHE_SERVER_ENV="${K3_LMCACHE_SERVER_ENV:-CUDA_MODULE_LOADING=LAZY LMCACHE_MP_GPU_STAGING_BATCH_SIZE=1}"
+  K3_LMCACHE_TRANSFER_MODE="${K3_LMCACHE_TRANSFER_MODE:-engine_driven}"
+  K3_LMCACHE_SHM_NAME="${K3_LMCACHE_SHM_NAME:-}"
+  # An empty CUDA_VISIBLE_DEVICES is process-local: vLLM workers still see all
+  # GPUs, while the standalone LMCache server remains CPU-only.
+  K3_LMCACHE_SERVER_ENV="${K3_LMCACHE_SERVER_ENV:-CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY}"
   # Stale-lock recovery timeouts for crashed readers/writers, not entry TTLs.
   K3_LMCACHE_L1_WRITE_TTL="${K3_LMCACHE_L1_WRITE_TTL:-600}"
   K3_LMCACHE_L1_READ_TTL="${K3_LMCACHE_L1_READ_TTL:-300}"
@@ -162,12 +164,14 @@ if [[ "${K3_ENABLE_LMCACHE:-1}" == "1" ]]; then
   K3_LMCACHE_PREFETCH_MAX_INFLIGHT="${K3_LMCACHE_PREFETCH_MAX_INFLIGHT:-8}"
 
   mkdir -p "${K3_LMCACHE_DISK_PATH}"
-  echo "[kimik3] Starting LMCache MP server: tcp://${K3_LMCACHE_MP_HOST}:${K3_LMCACHE_MP_PORT}, L1=${K3_LMCACHE_L1_GB}GB init=${K3_LMCACHE_L1_INIT_GB}GB CPU RAM, L2=${K3_LMCACHE_L2_GB}GB @ ${K3_LMCACHE_DISK_PATH}, chunk=${K3_LMCACHE_CHUNK_SIZE}, GPU staging batch=1"
+  echo "[kimik3] Starting LMCache MP server: tcp://${K3_LMCACHE_MP_HOST}:${K3_LMCACHE_MP_PORT}, mode=${K3_LMCACHE_TRANSFER_MODE}, CPU-only server, L1=${K3_LMCACHE_L1_GB}GB init=${K3_LMCACHE_L1_INIT_GB}GB CPU RAM, L2=${K3_LMCACHE_L2_GB}GB @ ${K3_LMCACHE_DISK_PATH}, chunk=${K3_LMCACHE_CHUNK_SIZE}"
   rm -f "${K3_LMCACHE_LOG}"
   # shellcheck disable=SC2086  # intentional list of env assignments
   env ${K3_LMCACHE_SERVER_ENV} "${K3_LMCACHE_BIN}" server \
     --host "${K3_LMCACHE_MP_HOST}" \
     --port "${K3_LMCACHE_MP_PORT}" \
+    --supported-transfer-mode "${K3_LMCACHE_TRANSFER_MODE}" \
+    --shm-name "${K3_LMCACHE_SHM_NAME}" \
     --chunk-size "${K3_LMCACHE_CHUNK_SIZE}" \
     --separate-object-groups \
     --l1-size-gb "${K3_LMCACHE_L1_GB}" \
@@ -205,7 +209,7 @@ if [[ "${K3_ENABLE_LMCACHE:-1}" == "1" ]]; then
   fi
   echo "[kimik3] LMCache MP server ready"
 
-  _kv_transfer_config=$(printf '{"kv_connector":"LMCacheMPConnector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.host":"tcp://%s","lmcache.mp.port":%s,"lmcache.mp.mq_timeout":30,"lmcache.mp.heartbeat_interval":5}}' "${K3_LMCACHE_MP_HOST}" "${K3_LMCACHE_MP_PORT}")
+  _kv_transfer_config=$(printf '{"kv_connector":"LMCacheMPConnector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.host":"tcp://%s","lmcache.mp.port":%s,"lmcache.mp.mq_timeout":30,"lmcache.mp.heartbeat_interval":5,"lmcache.mp.mp_transfer_mode":"%s"}}' "${K3_LMCACHE_MP_HOST}" "${K3_LMCACHE_MP_PORT}" "${K3_LMCACHE_TRANSFER_MODE}")
   # LMCacheMPConnector implements SupportsHMA and must receive Kimi-K3's
   # separate KDA and MLA cache groups. Forcing the legacy unified-cache path
   # makes vLLM fail while trying to promote MambaSpec to MLAAttentionSpec.

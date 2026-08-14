@@ -2,21 +2,22 @@
 
 A reproducible, fail-closed compatibility kit for serving **Kimi K3 QSRT** with a vLLM 0.26 hybrid KV cache and an LMCache 0.5.2-derived multiprocess cache server.
 
-This repository documents and packages the exact overlay that recovered an 8-GPU TP8/DCP8 deployment which failed at engine initialization after LMCache was enabled. It also reduces avoidable LMCache staging VRAM while preserving the production-safe CUDA IPC/pointer transfer path.
+This repository documents and packages the exact overlay that recovered an 8-GPU TP8/DCP8 deployment which failed at engine initialization after LMCache was enabled. It now also backports multi-group engine-driven transfer so the standalone LMCache server is CPU-only while the existing vLLM workers perform GPU gather/scatter.
 
 > [!IMPORTANT]
 > This is a narrow backport for the exact image and package builds in [`manifest.json`](manifest.json), not a universal patch for arbitrary vLLM or LMCache releases. Run `scripts/check_image.py` before mounting any overlay. A base-file hash mismatch is a stop condition, not a warning to ignore.
 
 ## What was broken
 
-Four separate problems appeared in sequence:
+Five separate problems appeared in sequence:
 
 | Stage | Symptom | Root cause | Fix |
 |---|---|---|---|
 | 1 | `Failed to promote local KV cache specs to one unified type` | `--disable-hybrid-kv-cache-manager` forced incompatible KDA/Mamba and MLA cache specs into one type | Keep vLLM's hybrid KV manager enabled |
 | 2 | `expected a Mamba [conv_state, ssm_state] tensor list, got Tensor` | vLLM 0.26 exposes unified Mamba/KDA state as one tensor; the installed LMCache expected the older two-tensor representation | Backport unified-Mamba and subpaged-MLA group edits from the LMCache 0.5.3 line while preserving the custom DCP/native ABI |
 | 3 | `chunk_size (1536) must be a multiple of ... tokens_per_block (12288)` | 1536 is the rank-local scheduler step, but LMCache sees a DCP-aware global block | Keep `max_num_batched_tokens=1536`; set LMCache chunk to `1536 × 8 = 12288` |
-| 4 | LMCache server showed about 960 MiB on every GPU | Pointer mode allocated four reusable staging chunks per rank in addition to CUDA IPC mappings | Make staging batch configurable and set it to one chunk |
+| 4 | LMCache server showed about 960 MiB on every GPU | Pointer mode allocated four reusable staging chunks per rank in addition to CUDA IPC mappings | Make staging batch configurable and set it to one chunk as a pointer-mode fallback |
+| 5 | Stock `engine_driven` rejected Kimi K3's four object groups and DCP8 cache geometry | The installed implementation supported one layout and treated the logical 12,288-token chunk as physical 12,288-token rank-local blocks | Backport LMCache PR #4410's multi-group protocol, then adapt each rank to 1,536 physical blocks while preserving 12,288-token logical objects |
 
 Read the complete failure chain in [docs/ROOT_CAUSE.md](docs/ROOT_CAUSE.md).
 
@@ -30,9 +31,10 @@ Validated on 2026-08-14:
 - vLLM: `0.26.1rc0+infernal.invocation.cu133.r7.vllm7ed814e.b12x5d648d9`
 - LMCache: `0.5.2+glm52dcp.5`
 - Python 3.12.3, PyTorch 2.13.0
-- FP8 KV, `max_model_len=200000`, `max_num_seqs=2`
-- Active vLLM KV reservation: 576 MiB per rank
+- FP8 KV, `max_model_len=420000`, `max_num_seqs=2`
+- Active vLLM KV reservation: 2 GiB per rank
 - LMCache: 48 GB host-RAM L1 + `fs_native`/O_DIRECT L2
+- Transfer: multi-group `engine_driven`; standalone LMCache server has no GPU visibility
 
 Observed validation:
 
@@ -44,17 +46,20 @@ Observed validation:
 | Full miss vs external restore | ~17.9 s vs ~5.95–6.24 s |
 | L2 prefetch | 8/8 chunks |
 | CPU-to-GPU load | 8/8 ranks, 5.23–8.73 GB/s per rank |
-| LMCache server VRAM attribution | ~960 MiB/GPU → ~724–726 MiB/GPU |
-| Avoided staging allocation | ~234–236 MiB/GPU |
+| Engine-driven contexts | 8/8 non-CUDA ranks registered |
+| Standalone LMCache server VRAM attribution | ~724–726 MiB/GPU pointer fallback → 0 MiB/GPU engine-driven |
+| GPU KV capacity / 420K concurrency | 1,034,634 tokens / 2.46× |
+| Free VRAM after long external restore | 613–693 MiB/GPU |
+| Persistent external restore in engine-driven mode | 12,288 / 22,090 tokens (55.6%) |
 
-The remaining ~724–726 MiB shown for the LMCache server is **not all duplicate allocation**. About 576 MiB is the already-existing vLLM KV tensor mapped into the server through CUDA IPC. See [docs/VRAM_ACCOUNTING.md](docs/VRAM_ACCOUNTING.md).
+The pointer-mode process row included a shared CUDA IPC mapping and was not entirely independent physical allocation. Engine-driven mode removes the mapping, staging buffer, block-ID workspace, and standalone CUDA context together. See [docs/VRAM_ACCOUNTING.md](docs/VRAM_ACCOUNTING.md).
 
 ## Repository layout
 
 ```text
 manifest.json                       Exact tested versions, paths and hashes
 launcher/                           LMCache-aware Kimi K3 QSRT launcher
-overlays/lmcache/                   Four narrow LMCache compatibility overlays
+overlays/lmcache/                   Fourteen hash-qualified LMCache overlays
 overlays/vllm/                      Tested B12X MLA DCP8 prerequisite overlay
 examples/compose.yml                Credential-free TP8/DCP8 Compose example
 examples/.env.example               Host-specific values to configure
@@ -84,7 +89,7 @@ python3 scripts/check_image.py
 Expected final line:
 
 ```text
-COMPATIBLE: 6 artifact(s) matched
+COMPATIBLE: 16 artifact(s) matched
 ```
 
 If any file is `MISMATCH` or `MISSING`, stop and use [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md). Do not force an overlay onto a different ABI.
@@ -152,8 +157,9 @@ Required settings:
 - LMCache `--separate-object-groups`
 - `K3_MAX_NUM_BATCHED_TOKENS=1536`
 - `K3_LMCACHE_CHUNK_SIZE=12288` for DCP8
-- `CUDA_MODULE_LOADING=LAZY`
-- `LMCACHE_MP_GPU_STAGING_BATCH_SIZE=1`
+- `K3_LMCACHE_TRANSFER_MODE=engine_driven`
+- standalone server environment: `CUDA_VISIBLE_DEVICES=` and `CUDA_MODULE_LOADING=LAZY`
+- empty shared-memory name so transfers use bounded per-request pickle buffers rather than pinning the full L1 pool in every worker
 
 ## Why not upgrade the whole LMCache package?
 
@@ -165,22 +171,25 @@ This repository therefore backports only the reviewed Python integration needed 
 2. subpaged MLA views,
 3. mixed group format discovery,
 4. DCP group information propagation, and
-5. configurable GPU staging.
+5. configurable GPU staging for the pointer-mode fallback,
+6. multi-group engine-driven transfer, and
+7. Kimi K3 DCP8 logical-to-physical block conversion.
 
-The upstream basis is [LMCache PR #4206](https://github.com/LMCache/LMCache/pull/4206), merged in the LMCache 0.5.3 development line. See [`NOTICE`](NOTICE) and [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+The upstream bases are [LMCache PR #4206](https://github.com/LMCache/LMCache/pull/4206) for unified-cache compatibility and [LMCache PR #4410](https://github.com/LMCache/LMCache/pull/4410) for multi-group engine-driven transfer. The latter is pinned to the reviewed PR head in `manifest.json`. See [`NOTICE`](NOTICE) and [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ## Known limits
 
 - The supplied payload is hash-qualified for one image build. Other versions require a fresh port and tests.
 - The included B12X MLA file is a tested DCP8 prerequisite for the listed infernal-invocation image. It is separated as component `vllm-dcp` in the manifest.
-- `engine_driven` transfer is not used. The installed implementation does not safely support Kimi K3's multiple hybrid cache groups.
-- Pointer/CUDA IPC mode still needs GPU visibility. Clearing `CUDA_VISIBLE_DEVICES` is not a CPU-only mode and breaks registration.
+- The CPU-only claim applies to the standalone LMCache server. vLLM workers still require GPUs and perform the engine-driven gather/scatter in their existing CUDA contexts.
+- Pointer/CUDA IPC remains a fallback path and still requires GPU visibility; do not combine pointer mode with the CPU-only server environment.
+- The engine-driven overlays are qualified for Kimi K3's four tested object groups, TP8/DCP8, and 12,288 logical / 1,536 rank-local token geometry. Other layouts require a new port.
 - LMCache reduces reusable-prefix pressure by extending KV storage to RAM and disk; it does not offload model weights or eliminate vLLM's active GPU KV working set.
 - A prompt shorter than one 12,288-token chunk may correctly create no reusable LMCache object.
 
 ## Rollback
 
-The installer never modifies container site-packages. Remove the six read-only bind mounts and restore your previous launcher/Compose. If `--force` replaced an existing patchwork file, the installer creates `*.bak.<UTC timestamp>` beside it.
+The installer never modifies container site-packages. Remove the sixteen read-only bind mounts and restore your previous launcher/Compose. If `--force` replaced an existing patchwork file, the installer creates `*.bak.<UTC timestamp>` beside it.
 
 Full rollback steps are in [docs/INSTALL.md#rollback](docs/INSTALL.md#rollback).
 

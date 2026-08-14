@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 import re
 import unittest
@@ -30,21 +32,32 @@ class RepositoryContractTests(unittest.TestCase):
         for relative in required:
             self.assertTrue((ROOT / relative).is_file(), relative)
 
-    def test_root_cause_document_covers_all_three_startup_failures(self) -> None:
+    def test_root_cause_document_covers_startup_and_transfer_failures(self) -> None:
         text = (ROOT / "docs" / "ROOT_CAUSE.md").read_text(encoding="utf-8")
         required = [
             "Failed to promote local KV cache specs to one unified type",
             "expected a Mamba [conv_state, ssm_state] tensor list, got Tensor",
             "chunk_size (1536) must be a multiple of",
             "1536 × 8 = 12288",
+            "stock engine-driven transfer could not serve Kimi K3",
         ]
         for phrase in required:
             self.assertIn(phrase, text)
 
     def test_compose_uses_read_only_overlays_and_keeps_hybrid_manager(self) -> None:
         text = (ROOT / "examples" / "compose.yml").read_text(encoding="utf-8")
-        self.assertGreaterEqual(text.count(":ro"), 6)
+        self.assertEqual(text.count("- ./patchwork/"), 16)
+        manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
+        for artifact in manifest["artifacts"]:
+            mount = (
+                f"- ./{artifact['install_path']}:{artifact['container_path']}:ro"
+            )
+            self.assertIn(mount, text, artifact["name"])
         self.assertIn("K3_LMCACHE_CHUNK_SIZE: ${K3_LMCACHE_CHUNK_SIZE:-12288}", text)
+        self.assertIn("K3_MAX_MODEL_LEN: ${K3_MAX_MODEL_LEN:-420000}", text)
+        self.assertIn("K3_KV_CACHE_MEMORY_BYTES: ${K3_KV_CACHE_MEMORY_BYTES:-2147483648}", text)
+        self.assertIn("K3_LMCACHE_TRANSFER_MODE: ${K3_LMCACHE_TRANSFER_MODE:-engine_driven}", text)
+        self.assertIn('K3_LMCACHE_SERVER_ENV: "CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY"', text)
         self.assertNotIn("--disable-hybrid-kv-cache-manager", text)
         self.assertNotIn("/home/" + "g0san", text)
 
@@ -54,6 +67,8 @@ class RepositoryContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertNotIn("--disable-hybrid-kv-cache-manager", text)
         self.assertIn("--separate-object-groups", text)
+        self.assertIn('--supported-transfer-mode "${K3_LMCACHE_TRANSFER_MODE}"', text)
+        self.assertIn('"lmcache.mp.mp_transfer_mode":"%s"', text)
         self.assertIn('--mamba-cache-mode "${K3_MAMBA_CACHE_MODE:-align}"', text)
 
     def test_repository_contains_no_live_credentials_or_private_host_paths(self) -> None:

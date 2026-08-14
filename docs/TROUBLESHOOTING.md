@@ -106,24 +106,25 @@ LMCache L1 is not free memory. Leave headroom for vLLM workers, page cache, Dock
 
 ## LMCache server still appears on every GPU
 
-Expected in pointer/CUDA IPC mode. The server needs GPU visibility to open IPC handles and run transfer kernels. The process-accounting number includes shared mappings.
+This is expected only in the pointer/CUDA IPC fallback. It is not expected in the documented engine-driven profile.
 
-Verify the staging configuration is present in the server process environment/log:
+Verify that both ends negotiated the same mode and that the server environment is CPU-only:
 
 ```text
+K3_LMCACHE_TRANSFER_MODE=engine_driven
+CUDA_VISIBLE_DEVICES=
 CUDA_MODULE_LOADING=LAZY
-LMCACHE_MP_GPU_STAGING_BATCH_SIZE=1
 ```
 
-Do not set `CUDA_VISIBLE_DEVICES=""`; that does not transform pointer mode into CPU-only transfer.
+Recreate the container rather than reusing an old server process. Check `/status` for eight registered non-CUDA IDs and zero registered GPU IDs, then compare the GPU PID with the host process list. Do not hide GPUs while still negotiating pointer mode; that breaks IPC registration.
 
 ## LMCache VRAM did not decrease
 
-Check that the mounted `cache_context.py` contains `LMCACHE_MP_GPU_STAGING_BATCH_SIZE` and the server was actually recreated. Compare the LMCache PID, not a stale process. A one-chunk staging batch changes real temporary allocation, while the shared 576 MiB mapping remains visible.
+Check that all ten multiprocess overlays and the engine-driven launcher are mounted read-only, the server was recreated, and no stale LMCache PID remains. A successful CPU-only server must not appear in `nvidia-smi --query-compute-apps`; use device-level used/free memory to measure physical headroom.
 
-## Why not switch to `engine_driven`?
+## Engine-driven registration fails or only one group appears
 
-The installed implementation does not safely support the four hybrid cache groups produced by this Kimi K3 setup. Do not use a closed or experimental multi-group patch as a drop-in production fix. It needs independent protocol, lock, pinned-memory, stale-copy, DCP and output-correctness validation.
+The base image's implementation supports only one layout. Confirm the manifest-qualified PR #4410 overlays are mounted, including `transfer_plan.py`, and that the connector reports four object-group layouts. For TP8/DCP8, the protocol retains a logical 12,288-token object while each rank gathers/scatters 1,536 physical tokens. A 12,288-token rank-local block interpretation causes invalid block IDs and transfer failure.
 
 ## Why not `pip install -U lmcache`?
 
@@ -156,7 +157,7 @@ free -h
 docker logs --timestamps kimik3 > /tmp/kimik3-oom.log 2>&1
 ```
 
-Distinguish model weights, vLLM active KV, CUDA graphs, LMCache staging, and shared IPC attribution. The tested explicit active-KV value is 603,979,776 bytes (576 MiB) per rank. Different weights, graphs or GPUs require a new memory budget.
+Distinguish model weights, vLLM active KV, CUDA graphs, worker-side transfer buffers, and—only in pointer mode—LMCache staging/shared IPC attribution. The tested 420K profile uses 2,147,483,648 bytes (2 GiB) per rank. Confirm the reported aggregate capacity is at least 860,160 tokens before claiming two full 420K sequences. Different weights, graphs or GPUs require a new memory budget.
 
 ## Reporting an issue
 

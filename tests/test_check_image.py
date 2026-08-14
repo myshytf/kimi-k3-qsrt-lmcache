@@ -16,17 +16,25 @@ SCRIPT = ROOT / "scripts" / "check_image.py"
 
 
 class ImageCompatibilityTests(unittest.TestCase):
-    def _run(self, payload: bytes) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self,
+        payload: bytes | None,
+        *,
+        base_absent: bool = False,
+        copy_error: bool = False,
+        schema_version: int = 2,
+    ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             rootfs = work / "rootfs"
             target = rootfs / "opt" / "fixture.py"
             target.parent.mkdir(parents=True)
-            target.write_bytes(payload)
+            if payload is not None:
+                target.write_bytes(payload)
 
             expected = hashlib.sha256(b"expected base\n").hexdigest()
             manifest = {
-                "schema_version": 1,
+                "schema_version": schema_version,
                 "tested_environment": {
                     "container_image": "fixture:test",
                     "container_image_id": "sha256:fixture",
@@ -38,11 +46,15 @@ class ImageCompatibilityTests(unittest.TestCase):
                         "source": "unused.py",
                         "install_path": "patchwork/unused.py",
                         "container_path": "/opt/fixture.py",
-                        "base_sha256": expected,
                         "patched_sha256": "0" * 64,
                     }
                 ],
             }
+            artifact = manifest["artifacts"][0]
+            if base_absent:
+                artifact["base_absent"] = True
+            else:
+                artifact["base_sha256"] = expected
             manifest_path = work / "manifest.json"
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
@@ -65,6 +77,9 @@ class ImageCompatibilityTests(unittest.TestCase):
                     elif args and args[0] == "create":
                         print("fixture-container")
                     elif args and args[0] == "cp":
+                        if os.environ.get("FAKE_DOCKER_COPY_ERROR") == "1":
+                            print("daemon copy operation failed", file=sys.stderr)
+                            raise SystemExit(1)
                         source = args[1].split(":", 1)[1].lstrip("/")
                         shutil.copy2(Path(os.environ["FAKE_ROOTFS"]) / source, args[2])
                     elif args[:2] == ["rm", "-f"]:
@@ -81,6 +96,7 @@ class ImageCompatibilityTests(unittest.TestCase):
             env["PATH"] = str(work) + os.pathsep + env["PATH"]
             env["FAKE_ROOTFS"] = str(rootfs)
             env["FAKE_DOCKER_LOG"] = str(log)
+            env["FAKE_DOCKER_COPY_ERROR"] = "1" if copy_error else "0"
             result = subprocess.run(
                 [
                     sys.executable,
@@ -112,6 +128,28 @@ class ImageCompatibilityTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("MISMATCH fixture", result.stdout)
         self.assertIn("rm -f fixture-container", result.docker_log)  # type: ignore[attr-defined]
+
+    def test_expected_absent_base_file_passes(self) -> None:
+        result = self._run(None, base_absent=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("MATCH-ABSENT fixture", result.stdout)
+
+    def test_expected_absent_base_file_fails_when_present(self) -> None:
+        result = self._run(b"unexpected\n", base_absent=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("UNEXPECTED-PRESENT fixture", result.stdout)
+
+    def test_expected_absent_base_file_does_not_mask_copy_error(self) -> None:
+        result = self._run(None, base_absent=True, copy_error=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("COPY-ERROR fixture", result.stdout)
+        self.assertNotIn("MATCH-ABSENT fixture", result.stdout)
+
+    def test_unsupported_manifest_schema_fails_before_docker(self) -> None:
+        result = self._run(b"expected base\n", schema_version=1)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Unsupported manifest schema_version=1", result.stderr)
+        self.assertEqual(result.docker_log, "")  # type: ignore[attr-defined]
 
 
 if __name__ == "__main__":

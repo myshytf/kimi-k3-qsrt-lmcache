@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "project": "myshytf/kimi-k3-qsrt-lmcache",
   "tested_environment": {
     "date": "2026-08-14",
@@ -15,16 +15,29 @@
     "dcp_size": 8,
     "dcp_kv_cache_interleave_size": 1,
     "model": "lukealonso/Kimi-K3-QSRT-K2",
-    "max_model_len": 200000,
+    "max_model_len": 420000,
+    "max_num_seqs": 2,
     "kv_cache_dtype": "fp8",
+    "kv_cache_memory_bytes_per_rank": 2147483648,
+    "reported_gpu_kv_cache_tokens": 1034634,
+    "reported_max_concurrency_at_max_model_len": 2.46,
+    "post_restore_free_vram_mib_range": [
+      613,
+      693
+    ],
     "scheduler_block_tokens": 1536,
-    "lmcache_chunk_tokens": 12288
+    "lmcache_chunk_tokens": 12288,
+    "lmcache_transfer_mode": "engine_driven",
+    "registered_non_cuda_contexts": 8,
+    "registered_gpu_contexts": 0
   },
   "upstream": {
     "lmcache_license": "Apache-2.0",
     "lmcache_v0_5_3_commit": "140819c9d57a975dbc5678a6459a218e544cb58b",
     "unified_kv_cache_pr": "https://github.com/LMCache/LMCache/pull/4206",
-    "unified_kv_cache_pr_merge_commit": "f1ab19a148bf666b79fc2ce0babdb67dd637b430"
+    "unified_kv_cache_pr_merge_commit": "f1ab19a148bf666b79fc2ce0babdb67dd637b430",
+    "hybrid_engine_driven_pr": "https://github.com/LMCache/LMCache/pull/4410",
+    "hybrid_engine_driven_pr_head_commit": "0cc4b50d2ff67d79fd29d36ef2467dbb1af4f7f5"
   },
   "artifacts": [
     {
@@ -34,7 +47,7 @@
       "install_path": "patchwork/serve-kimi-k3-qsrt-lmcache.sh",
       "container_path": "/usr/local/bin/serve-kimi-k3-qsrt.sh",
       "base_sha256": "3750eba742542508ca65e5d23eac5a1100c41e4672e9e6b4bdcbcf9d37706714",
-      "patched_sha256": "c17c1e3d45d48f4e89107d378d149ba12c20c1f2966adb4ede529e80e6bac328"
+      "patched_sha256": "c29c8d015300b230ba2d970c58a052367150443921215757194ce57b1c8146d4"
     },
     {
       "name": "lmcache-kv-cache-group-edits",
@@ -80,6 +93,96 @@
       "container_path": "/opt/infernal-invocation/vllm/vllm/v1/attention/backends/mla/b12x_mla.py",
       "base_sha256": "71a8342a58b6ee40396a63f17ada45c381630f078699502ea76ad1c2408c42ef",
       "patched_sha256": "6955a490fcde8041312e3e0d17cfa4f0f322701037e56266019a404c7bda2393"
+    },
+    {
+      "name": "lmcache-mp-custom-types",
+      "component": "lmcache",
+      "source": "overlays/lmcache/v1/multiprocess/custom_types.py",
+      "install_path": "patchwork/lmcache/v1/multiprocess/custom_types.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/custom_types.py",
+      "patched_sha256": "001d2ba57c0246cb9b5c8d353b14546221aa3d3ad27c25e4cb39e1c6746d8d0e",
+      "base_sha256": "038e08b3ea78166762016b3fe8631a23af6fa2ed9d3edd01323f05f4409c51cf"
+    },
+    {
+      "name": "lmcache-engine-driven-transfer",
+      "component": "lmcache",
+      "source": "overlays/lmcache/v1/multiprocess/modules/engine_driven_transfer.py",
+      "install_path": "patchwork/lmcache/v1/multiprocess/modules/engine_driven_transfer.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/modules/engine_driven_transfer.py",
+      "patched_sha256": "fbf3eb662999192a794d16813252dd879c421e19052771761ca61b0dba26707a",
+      "base_sha256": "b1cd08e347d613d0e14688a5bebc9bd8b1cec9df2f4efd5d7393ccf65bb92076"
+    },
+    {
+      "name": "lmcache-lmcache-driven-transfer",
+      "component": "lmcache",
+      "source": "overlays/lmcache/v1/multiprocess/modules/lmcache_driven_transfer.py",
+      "install_path": "patchwork/lmcache/v1/multiprocess/modules/lmcache_driven_transfer.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/modules/lmcache_driven_transfer.py",
+      "patched_sha256": "c71f701af1d5fae4c7b59ef89d5577c083348679af0fe39e82cad1768a6f6d89",
+      "base_sha256": "429ae446bf323d1e63dc3b879cdae943f901e4af321e0b78801812f667b0ebd1"
+    },
+    {
+      "name": "lmcache-server-transfer",
+      "component": "lmcache",
+      "source": "overlays/lmcache/v1/multiprocess/modules/server_transfer.py",
+      "install_path": "patchwork/lmcache/v1/multiprocess/modules/server_transfer.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/modules/server_transfer.py",
+      "patched_sha256": "777c94df84549c61f7bf27ecacfeba40dc2bb21c8ae30ab5c1124d58d634073b",
+      "base_sha256": "8c891274b4ebdbbb5a6a9c65ed8e7afd4537326a81928eabf816acf484bbb16a"
+    },
+    {
+      "name": "lmcache-async-engine-driven-context",
+      "component": "lmcache",
+      "source": "overlays/lmcache/v1/multiprocess/transfer_context/async_engine_driven.py",
+      "install_path": "patchwork/lmcache/v1/multiprocess/transfer_context/async_engine_driven.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/async_engine_driven.py",
+      "patched_sha256": "5dd77cf61a79e7b53ce8919696eea6a5642866d531a12827089d171dc49bb870",
+      "base_sha256": "95552fa41ea0cb9d54c0c16fd2aa23ef47ee7c791c82d0d3c556a3d724d07d7c"
+    },
+    {
+      "name": "lmcache-engine-driven-context-base",
+      "component": "lmcache",
+      "source": "overlays/lmcache/v1/multiprocess/transfer_context/base.py",
+      "install_path": "patchwork/lmcache/v1/multiprocess/transfer_context/base.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/base.py",
+      "patched_sha256": "0a225e58f88e591c9a6e43f17f3391d1c3c177d1857828e29752ddb0f884e600",
+      "base_sha256": "010723f4a3250a7c447bf1b680ebc2dad76d2137a7a4f4ed9a955ff3869391dd"
+    },
+    {
+      "name": "lmcache-pickle-transfer-context",
+      "component": "lmcache",
+      "source": "overlays/lmcache/v1/multiprocess/transfer_context/pickle.py",
+      "install_path": "patchwork/lmcache/v1/multiprocess/transfer_context/pickle.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/pickle.py",
+      "patched_sha256": "74f28bf4185efa928843953976e7aa31dec2d09d9e2b76cebbe05ca8b16c048c",
+      "base_sha256": "99d2458a4275e7b21688bba72d26dfe45ccfbc0078102112f5947a3ab3794ce1"
+    },
+    {
+      "name": "lmcache-shm-transfer-context",
+      "component": "lmcache",
+      "source": "overlays/lmcache/v1/multiprocess/transfer_context/shm.py",
+      "install_path": "patchwork/lmcache/v1/multiprocess/transfer_context/shm.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/shm.py",
+      "patched_sha256": "5b54960fd1299e4d9fee87b1f0ed38e16a685959a044ad02119f0232dc5be802",
+      "base_sha256": "96d100c081338a92833c39b02b8d0b36715a8df407642c04b9e127886c315cba"
+    },
+    {
+      "name": "lmcache-worker-transfer",
+      "component": "lmcache",
+      "source": "overlays/lmcache/v1/multiprocess/transfer_context/worker_transfer.py",
+      "install_path": "patchwork/lmcache/v1/multiprocess/transfer_context/worker_transfer.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/worker_transfer.py",
+      "patched_sha256": "356ccd5412526256c3a533dc4e4f885aef9ff1ea3f84ba5b9d6661587074730f",
+      "base_sha256": "4e851a51d799bb9e33a7444bec1fc1be7a20082af6260877e6945c411992fe0e"
+    },
+    {
+      "name": "lmcache-transfer-plan",
+      "component": "lmcache",
+      "source": "overlays/lmcache/v1/multiprocess/transfer_plan.py",
+      "install_path": "patchwork/lmcache/v1/multiprocess/transfer_plan.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_plan.py",
+      "patched_sha256": "31e1c76e15eb1dbd71c711a1f357e12979c39e9e54a8647e6499ef2bb3d0fb1d",
+      "base_absent": true
     }
   ]
 }

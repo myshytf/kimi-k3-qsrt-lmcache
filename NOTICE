@@ -10,6 +10,10 @@ Unified vLLM 0.26 Mamba-cache compatibility is based in part on LMCache
 pull request #4206, merged as f1ab19a148bf666b79fc2ce0babdb67dd637b430:
   https://github.com/LMCache/LMCache/pull/4206
 
+Multi-group engine-driven transfer is based in part on LMCache pull request
+#4410, reviewed at commit 0cc4b50d2ff67d79fd29d36ef2467dbb1af4f7f5:
+  https://github.com/LMCache/LMCache/pull/4410
+
 This product also includes a modified vLLM B12X MLA backend:
   https://github.com/vllm-project/vllm
   Copyright the vLLM contributors

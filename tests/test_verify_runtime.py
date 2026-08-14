@@ -15,6 +15,9 @@ SCRIPT = ROOT / "scripts" / "verify_runtime.py"
 
 class FixtureHandler(BaseHTTPRequestHandler):
     lmcache_healthy = True
+    non_cuda_contexts = 8
+    gpu_contexts = 0
+    include_gpu_contexts = True
 
     def log_message(self, format: str, *args: object) -> None:
         return
@@ -32,7 +35,19 @@ class FixtureHandler(BaseHTTPRequestHandler):
             self._json(200, {"data": [{"id": "Kimi-K3"}]})
         elif self.path == "/status":
             if self.lmcache_healthy:
-                self._json(200, {"health": "OK", "engine_type": "MPCacheServer"})
+                payload = {
+                        "health": "OK",
+                        "is_healthy": True,
+                        "engine_type": "MPCacheServer",
+                        "registered_non_cuda_instance_ids": list(
+                            range(self.non_cuda_contexts)
+                        ),
+                    }
+                if self.include_gpu_contexts:
+                    payload["registered_kv_cache_ids"] = list(
+                        range(self.gpu_contexts)
+                    )
+                self._json(200, payload)
             else:
                 self._json(503, {"health": "ERROR"})
         else:
@@ -55,11 +70,23 @@ class FixtureHandler(BaseHTTPRequestHandler):
 
 
 class RuntimeVerificationTests(unittest.TestCase):
-    def _run(self, lmcache_healthy: bool) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self,
+        lmcache_healthy: bool,
+        *,
+        non_cuda_contexts: int = 8,
+        gpu_contexts: int = 0,
+        include_gpu_contexts: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
         handler = type(
             "ConfiguredFixtureHandler",
             (FixtureHandler,),
-            {"lmcache_healthy": lmcache_healthy},
+            {
+                "lmcache_healthy": lmcache_healthy,
+                "non_cuda_contexts": non_cuda_contexts,
+                "gpu_contexts": gpu_contexts,
+                "include_gpu_contexts": include_gpu_contexts,
+            },
         )
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -98,6 +125,21 @@ class RuntimeVerificationTests(unittest.TestCase):
         result = self._run(lmcache_healthy=False)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("FAIL lmcache", result.stdout)
+
+    def test_missing_engine_driven_rank_fails(self) -> None:
+        result = self._run(lmcache_healthy=True, non_cuda_contexts=7)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("non-CUDA contexts=7 expected=8", result.stdout)
+
+    def test_unexpected_gpu_context_fails(self) -> None:
+        result = self._run(lmcache_healthy=True, gpu_contexts=1)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("GPU contexts=1 expected=0", result.stdout)
+
+    def test_omitted_zero_gpu_context_field_passes(self) -> None:
+        result = self._run(lmcache_healthy=True, include_gpu_contexts=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("gpu_contexts=0", result.stdout)
 
 
 if __name__ == "__main__":

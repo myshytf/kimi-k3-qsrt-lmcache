@@ -18,6 +18,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", help="Model ID (default: first /v1/models entry).")
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--max-tokens", type=int, default=8)
+    parser.add_argument("--expected-non-cuda-contexts", type=int, default=8)
+    parser.add_argument("--expected-gpu-contexts", type=int, default=0)
     parser.add_argument(
         "--api-key-env",
         default="OPENAI_API_KEY",
@@ -110,7 +112,33 @@ def main() -> int:
         health = status.get("health")
         if isinstance(health, str) and health.lower() not in {"ok", "healthy"}:
             raise ValueError(f"reported health={health}")
-        print("PASS lmcache")
+        if status.get("is_healthy") is False:
+            raise ValueError("reported is_healthy=false")
+
+        non_cuda = status.get("registered_non_cuda_instance_ids")
+        if not isinstance(non_cuda, list):
+            raise ValueError("status has no registered_non_cuda_instance_ids list")
+        if len(non_cuda) != args.expected_non_cuda_contexts:
+            raise ValueError(
+                f"non-CUDA contexts={len(non_cuda)} "
+                f"expected={args.expected_non_cuda_contexts}"
+            )
+
+        # This LMCache build omits the GPU-context field entirely when there
+        # are no pointer/CUDA contexts. Treat absence as the empty set, but
+        # still validate the type and count when the field is present.
+        gpu_contexts = status.get("registered_kv_cache_ids", [])
+        if not isinstance(gpu_contexts, list):
+            raise ValueError("registered_kv_cache_ids is not a list")
+        if len(gpu_contexts) != args.expected_gpu_contexts:
+            raise ValueError(
+                f"GPU contexts={len(gpu_contexts)} "
+                f"expected={args.expected_gpu_contexts}"
+            )
+        print(
+            "PASS lmcache "
+            f"non_cuda_contexts={len(non_cuda)} gpu_contexts={len(gpu_contexts)}"
+        )
     except (HTTPError, URLError, TimeoutError, OSError, ValueError, RuntimeError) as error:
         failures += 1
         print(f"FAIL lmcache {type(error).__name__}: {error}")

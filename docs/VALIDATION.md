@@ -17,11 +17,8 @@ From the deployment directory:
 ```bash
 bash -n patchwork/serve-kimi-k3-qsrt-lmcache.sh
 python3 -m py_compile \
-  patchwork/lmcache/integration/vllm/kv_cache_group_edits.py \
-  patchwork/lmcache/integration/vllm/lmcache_mp_connector.py \
-  patchwork/lmcache/v1/gpu_connector/utils.py \
-  patchwork/lmcache/v1/platform/cuda/cache_context.py \
-  patchwork/vllm/v1/attention/backends/mla/b12x_mla.py
+  patchwork/lmcache/integration/vllm/kv_cache_group_edits.py
+python3 -m compileall -q patchwork/lmcache patchwork/vllm
 docker compose config --quiet
 ```
 
@@ -40,10 +37,11 @@ ZMQ cache server is running
 LMCache MP server ready
 KV cache group edits applied
 Registering kv caches
+Registered engine-driven context
 Application startup complete
 ```
 
-The edit summary must cover the model's recurrent KDA/Mamba groups and MLA groups. Verify all eight ranks register, not only rank 0.
+The edit summary must cover the model's recurrent KDA/Mamba groups and MLA groups. Verify all eight ranks register non-CUDA engine-driven contexts, not only rank 0.
 
 Check endpoints:
 
@@ -52,7 +50,7 @@ curl -fsS http://127.0.0.1:8088/status | python3 -m json.tool
 curl -fsS http://127.0.0.1:8090/v1/models | python3 -m json.tool
 ```
 
-LMCache status schemas can vary by build. Require HTTP 200, a healthy service indication, the intended chunk size, and eight registered GPU contexts/IDs where those fields are exposed. Do not hard-code an undocumented field name into operational automation without inspecting the actual response.
+LMCache status schemas can vary by build. Require HTTP 200, a healthy service indication, the intended chunk size, eight registered non-CUDA contexts/IDs, and zero registered GPU contexts in engine-driven mode where those fields are exposed. Do not hard-code an undocumented field name into operational automation without inspecting the actual response.
 
 ## Gate 3: short inference
 
@@ -199,7 +197,7 @@ docker inspect kimik3 \
 
 Expected: `running`, exit code 0 for the active state, and restart count 0.
 
-## Gate 8: VRAM attribution
+## Gate 8: VRAM attribution and KV capacity
 
 Capture per-process values at idle and after the long request:
 
@@ -208,7 +206,7 @@ nvidia-smi --query-compute-apps=gpu_uuid,pid,process_name,used_memory \
   --format=csv,noheader,nounits
 ```
 
-Compare the LMCache server PID before and after setting `LMCACHE_MP_GPU_STAGING_BATCH_SIZE=1`. Do not add vLLM and LMCache per-process values as if CUDA IPC mappings were independent physical allocations. See [VRAM_ACCOUNTING.md](VRAM_ACCOUNTING.md).
+In engine-driven mode the compute-process list must contain the eight vLLM workers and no standalone LMCache server PID. Also record device-level free memory and verify startup reports at least 860,160 aggregate KV tokens for two block-rounded 420K sequences. Do not add pointer-mode vLLM and LMCache rows as if CUDA IPC mappings were independent physical allocations. See [VRAM_ACCOUNTING.md](VRAM_ACCOUNTING.md).
 
 ## Gate 9: restart persistence
 

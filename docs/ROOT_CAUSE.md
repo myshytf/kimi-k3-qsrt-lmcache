@@ -169,16 +169,32 @@ saved: ~234–236 MiB/GPU
 
 See [VRAM_ACCOUNTING.md](VRAM_ACCOUNTING.md) before interpreting per-process sums.
 
-## Why `engine_driven` was not selected
+## Issue 5: stock engine-driven transfer could not serve Kimi K3
 
-An engine-driven transfer path can avoid some server-side CUDA state in architectures that support it, but the implementation installed in this image rejects Kimi K3's multiple hybrid cache groups. Experimental upstream work also changed protocol framing, locks, pinned buffers and DCP behavior.
+### Observation
 
-The verified production choice is therefore:
+Hiding GPUs from the standalone server removed its CUDA allocation, but the base image's engine-driven implementation could register only one cache layout. Kimi K3 exposes four separate recurrent KDA/Mamba and MLA object groups.
 
-- LMCache-driven pointer/CUDA IPC transfer,
-- GPU visibility retained,
-- staging batch reduced to one,
-- no speculative protocol backport.
+### Cause
+
+The installed protocol had one global layout and did not preserve object-group IDs through registration, key resolution, transfer planning, and worker gather/scatter. Its DCP geometry also confused the 12,288-token logical LMCache object with the 1,536 physical tokens resident on each DCP rank.
+
+### Fix
+
+The overlay backports the reviewed multi-group protocol from LMCache PR #4410 and pins its PR-head commit in `manifest.json`. A local adaptation then:
+
+- registers all four group layouts for each of eight ranks,
+- retains group IDs through lookup, store, load, and transfer plans,
+- keeps 12,288-token logical objects and keys,
+- gathers/scatters 1,536 physical tokens per DCP rank,
+- executes CUDA work in the existing vLLM worker contexts, and
+- starts the standalone LMCache server with no visible GPU.
+
+The server consequently owns no CUDA context, IPC mapping, GPU staging allocation, or block-ID workspace. Persistent host-RAM L1 and filesystem L2 remain active.
+
+### Verification
+
+The production gate requires 8/8 registered non-CUDA contexts, no LMCache GPU process, successful short inference, deterministic L2 restore after recreate, external-token metrics, and a strict error scan. Zero VRAM attribution alone is not correctness proof.
 
 ## Why Compose validation did not catch this
 

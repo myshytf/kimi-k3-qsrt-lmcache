@@ -17,6 +17,10 @@ The source of truth is [`../manifest.json`](../manifest.json).
 | Parallelism | TP8, DCP8, A2A, interleave 1 |
 | Scheduler step | 1536 tokens |
 | LMCache chunk | 12,288 tokens |
+| Maximum model length | 420,000 tokens |
+| Active KV reservation | 2 GiB per rank |
+| Reported KV capacity | 1,034,634 tokens; 2.46× at 420K |
+| Transfer mode | Multi-group `engine_driven`; CPU-only standalone server |
 
 ## Fail-closed base hashes
 
@@ -24,6 +28,10 @@ Each artifact in the manifest has two hashes:
 
 - `base_sha256`: the file inside the unmodified tested image
 - `patched_sha256`: the read-only overlay supplied by this repository
+
+An artifact added by the backport and absent from the tested base image uses
+`base_absent: true` instead of a fabricated base hash. Compatibility then
+requires the path to be absent; an unexpected file at that path fails closed.
 
 Run:
 
@@ -36,7 +44,7 @@ The checker:
 1. compares the local Docker image ID,
 2. creates a stopped probe container with `/bin/true`,
 3. extracts each target file with `docker cp`,
-4. compares all base SHA-256 values, and
+4. compares all base SHA-256 values or verifies declared base-file absence, and
 5. removes the probe container in `finally` on success or failure.
 
 A mismatch means the code surrounding the patch may have changed. Do not use `--allow-image-id-mismatch` unless you are intentionally auditing a rebuilt image; even then, every file hash still has to match.
@@ -46,7 +54,7 @@ A mismatch means the code surrounding the patch may have changed. Do not use `--
 | Manifest component | Purpose | Required for tested deployment |
 |---|---|---:|
 | `launcher` | Starts LMCache MP, waits for readiness, and launches vLLM with hybrid-safe settings | Yes |
-| `lmcache` | Unified Mamba, subpaged MLA, mixed-format/DCP registration, staging configuration | Yes |
+| `lmcache` | Unified Mamba, subpaged MLA, mixed-format/DCP registration, pointer fallback staging, and multi-group engine-driven transfer | Yes |
 | `vllm-dcp` | B12X MLA DCP planning/metadata for this image | Yes for the documented TP8/DCP8 profile |
 
 The B12X overlay is separated because it is a serving prerequisite, not the LMCache root-cause fix itself.
@@ -58,6 +66,13 @@ The unified-cache compatibility work is based on:
 - [LMCache PR #4206 — vLLM 0.26 unified Mamba support](https://github.com/LMCache/LMCache/pull/4206)
 - merge commit `f1ab19a148bf666b79fc2ce0babdb67dd637b430`
 - LMCache v0.5.3 repository commit `140819c9d57a975dbc5678a6459a218e544cb58b`
+
+The engine-driven work is based on:
+
+- [LMCache PR #4410 — multi-group engine-driven transfer](https://github.com/LMCache/LMCache/pull/4410)
+- reviewed PR-head commit `0cc4b50d2ff67d79fd29d36ef2467dbb1af4f7f5`
+- a local Kimi K3 adaptation from 12,288 logical DCP tokens to 1,536
+  physical rank-local blocks per transfer group
 
 The files are not copied wholesale from current `dev`. They combine the required upstream integration with the tested image's custom DCP behavior and native format ABI.
 
@@ -75,7 +90,8 @@ These require fresh startup, inference, persistent-L2 and output-correctness tes
 - Stock LMCache 0.5.2 without this image's DCP extension
 - Arbitrary upstream LMCache 0.5.3+ native extensions mixed with these Python files
 - vLLM versions whose unified cache specs or connector API differ
-- `engine_driven` transfer for multiple Kimi K3 hybrid groups in the tested installed implementation
+- Engine-driven layouts other than the tested four Kimi K3 object groups
+- Running the standalone server CPU-only while negotiating pointer/CUDA IPC mode
 - `NH != 1` unified KDA tensors using the compatibility flattening
 - DCP sizes other than 8 while retaining `K3_LMCACHE_CHUNK_SIZE=12288`
 
@@ -106,6 +122,7 @@ These are calculations, not validation claims. Confirm every LMCache engine grou
 4. Verify unified KDA has `NH == 1` before using the 3-D view adapter.
 5. Preserve any local DCP calculation in `create_engine_group_infos_from_vllm()`.
 6. Add new base and patched hashes to a separate manifest revision.
-7. Run synthetic zero-copy pointer/shape tests.
-8. Run full model startup, short inference, long-prefix L2 restart, and output-correctness tests.
-9. Record the exact image digest, not only a mutable tag.
+7. For engine-driven mode, verify every group's logical and rank-local block geometry.
+8. Run synthetic pointer and engine-driven shape/transfer tests.
+9. Run full model startup, short inference, long-prefix L2 restart, and output-correctness tests.
+10. Record the exact image digest, not only a mutable tag.

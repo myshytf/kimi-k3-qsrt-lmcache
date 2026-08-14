@@ -21,7 +21,7 @@ cd kimi-k3-qsrt-lmcache
 python3 scripts/check_image.py
 ```
 
-Do not continue unless the final result is `COMPATIBLE` and all six artifacts match.
+Do not continue unless the final result is `COMPATIBLE` and all sixteen artifacts match, including the declared absence of the new `transfer_plan.py` base path.
 
 ## 2. Prepare host directories
 
@@ -98,11 +98,8 @@ Set `HF_TOKEN` only if runtime tokenizer/config access requires it. The example 
 cd "$DEPLOY_DIR"
 bash -n patchwork/serve-kimi-k3-qsrt-lmcache.sh
 python3 -m py_compile \
-  patchwork/lmcache/integration/vllm/kv_cache_group_edits.py \
-  patchwork/lmcache/integration/vllm/lmcache_mp_connector.py \
-  patchwork/lmcache/v1/gpu_connector/utils.py \
-  patchwork/lmcache/v1/platform/cuda/cache_context.py \
-  patchwork/vllm/v1/attention/backends/mla/b12x_mla.py
+  patchwork/lmcache/integration/vllm/kv_cache_group_edits.py
+python3 -m compileall -q patchwork/lmcache patchwork/vllm
 docker compose config --quiet
 ```
 
@@ -127,7 +124,7 @@ docker inspect kimik3 \
 docker compose logs --no-color --timestamps kimik3 > startup.log
 ```
 
-The launcher starts LMCache first, waits up to 120 seconds for `ZMQ cache server is running`, and only then executes vLLM. Model initialization can take several additional minutes.
+The launcher starts a CPU-only LMCache server in multi-group `engine_driven` mode, waits up to 120 seconds for `ZMQ cache server is running`, and only then executes vLLM. Model initialization can take several additional minutes.
 
 ## 7. Verify
 
@@ -170,6 +167,16 @@ Re-run static checks before recreating the container.
    /opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/lmcache_mp_connector.py
    /opt/venv/lib/python3.12/site-packages/lmcache/v1/gpu_connector/utils.py
    /opt/venv/lib/python3.12/site-packages/lmcache/v1/platform/cuda/cache_context.py
+   /opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/custom_types.py
+   /opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/modules/engine_driven_transfer.py
+   /opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/modules/lmcache_driven_transfer.py
+   /opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/modules/server_transfer.py
+   /opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/async_engine_driven.py
+   /opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/base.py
+   /opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/pickle.py
+   /opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/shm.py
+   /opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/worker_transfer.py
+   /opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_plan.py
    /opt/infernal-invocation/vllm/vllm/v1/attention/backends/mla/b12x_mla.py
    ```
 

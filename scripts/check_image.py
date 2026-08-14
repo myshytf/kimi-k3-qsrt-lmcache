@@ -57,6 +57,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    if manifest.get("schema_version") != 2:
+        raise SystemExit(
+            f"Unsupported manifest schema_version={manifest.get('schema_version')!r}; "
+            "expected 2"
+        )
     tested = manifest["tested_environment"]
     image = args.image or tested["container_image"]
     expected_image_id = tested.get("container_image_id")
@@ -92,6 +97,7 @@ def main() -> int:
             probe = Path(directory)
             for index, artifact in enumerate(selected):
                 extracted = probe / f"{index:02d}-{Path(artifact['container_path']).name}"
+                base_absent = bool(artifact.get("base_absent", False))
                 copied = run_docker(
                     "cp",
                     f"{container_id}:{artifact['container_path']}",
@@ -99,9 +105,28 @@ def main() -> int:
                     check=False,
                 )
                 if copied.returncode != 0:
-                    failures += 1
                     detail = copied.stderr.strip() or copied.stdout.strip()
-                    print(f"MISSING {artifact['name']}: {detail}")
+                    missing_error = any(
+                        marker in detail.lower()
+                        for marker in (
+                            "could not find the file",
+                            "no such file or directory",
+                        )
+                    )
+                    if base_absent and missing_error:
+                        print(f"MATCH-ABSENT {artifact['name']}")
+                        continue
+                    failures += 1
+                    label = "COPY-ERROR" if base_absent else "MISSING"
+                    print(f"{label} {artifact['name']}: {detail}")
+                    continue
+
+                if base_absent:
+                    failures += 1
+                    print(
+                        f"UNEXPECTED-PRESENT {artifact['name']}: "
+                        f"{artifact['container_path']} must be absent in the base image"
+                    )
                     continue
 
                 actual = sha256(extracted)

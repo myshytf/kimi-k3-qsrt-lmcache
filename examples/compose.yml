@@ -42,11 +42,11 @@ services:
       K3_HOST: 0.0.0.0
       K3_PORT: "8090"
       K3_TP_SIZE: "8"
-      K3_MAX_MODEL_LEN: ${K3_MAX_MODEL_LEN:-200000}
+      K3_MAX_MODEL_LEN: ${K3_MAX_MODEL_LEN:-420000}
       K3_GPU_MEMORY_UTILIZATION: ${K3_GPU_MEMORY_UTILIZATION:-0.9765}
-      # Explicit per-rank active KV reservation (576 MiB). Re-budget this for
-      # another graph/model/concurrency profile instead of changing it blindly.
-      K3_KV_CACHE_MEMORY_BYTES: ${K3_KV_CACHE_MEMORY_BYTES:-603979776}
+      # Explicit 2 GiB/rank active KV reservation. The validated TP8/DCP8
+      # profile provides enough aggregate tokens for two 420K contexts.
+      K3_KV_CACHE_MEMORY_BYTES: ${K3_KV_CACHE_MEMORY_BYTES:-2147483648}
       K3_MAX_NUM_BATCHED_TOKENS: ${K3_MAX_NUM_BATCHED_TOKENS:-1536}
       K3_MAX_NUM_SEQS: ${K3_MAX_NUM_SEQS:-2}
       K3_COMPILATION_CONFIG: '{"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2],"custom_ops":["all"]}'
@@ -63,7 +63,9 @@ services:
       K3_LMCACHE_L1_INIT_GB: ${K3_LMCACHE_L1_INIT_GB:-48}
       K3_LMCACHE_L2_GB: ${K3_LMCACHE_L2_GB:-1200}
       K3_LMCACHE_DISK_PATH: /lmcache/l2
-      K3_LMCACHE_SERVER_ENV: "CUDA_MODULE_LOADING=LAZY LMCACHE_MP_GPU_STAGING_BATCH_SIZE=1"
+      K3_LMCACHE_TRANSFER_MODE: ${K3_LMCACHE_TRANSFER_MODE:-engine_driven}
+      # Hide GPUs only from the standalone server. vLLM workers retain all GPUs.
+      K3_LMCACHE_SERVER_ENV: "CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY"
       K3_LMCACHE_PREFETCH_POLICY: default
       K3_LMCACHE_PREFETCH_MAX_INFLIGHT: "8"
 
@@ -83,4 +85,15 @@ services:
       - ./patchwork/lmcache/integration/vllm/lmcache_mp_connector.py:/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/lmcache_mp_connector.py:ro
       - ./patchwork/lmcache/v1/gpu_connector/utils.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/gpu_connector/utils.py:ro
       - ./patchwork/lmcache/v1/platform/cuda/cache_context.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/platform/cuda/cache_context.py:ro
+      # Multi-group engine-driven transfer plus Kimi K3 DCP8 geometry.
+      - ./patchwork/lmcache/v1/multiprocess/custom_types.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/custom_types.py:ro
+      - ./patchwork/lmcache/v1/multiprocess/modules/engine_driven_transfer.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/modules/engine_driven_transfer.py:ro
+      - ./patchwork/lmcache/v1/multiprocess/modules/lmcache_driven_transfer.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/modules/lmcache_driven_transfer.py:ro
+      - ./patchwork/lmcache/v1/multiprocess/modules/server_transfer.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/modules/server_transfer.py:ro
+      - ./patchwork/lmcache/v1/multiprocess/transfer_context/async_engine_driven.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/async_engine_driven.py:ro
+      - ./patchwork/lmcache/v1/multiprocess/transfer_context/base.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/base.py:ro
+      - ./patchwork/lmcache/v1/multiprocess/transfer_context/pickle.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/pickle.py:ro
+      - ./patchwork/lmcache/v1/multiprocess/transfer_context/shm.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/shm.py:ro
+      - ./patchwork/lmcache/v1/multiprocess/transfer_context/worker_transfer.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/worker_transfer.py:ro
+      - ./patchwork/lmcache/v1/multiprocess/transfer_plan.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_plan.py:ro
       - ./patchwork/vllm/v1/attention/backends/mla/b12x_mla.py:/opt/infernal-invocation/vllm/vllm/v1/attention/backends/mla/b12x_mla.py:ro
