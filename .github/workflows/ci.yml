@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Unit and contract tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Compile Python sources
+        run: python3 -m compileall -q scripts overlays tests
+
+      - name: Check launcher syntax
+        run: bash -n launcher/serve-kimi-k3-qsrt-lmcache.sh
+
+      - name: Exercise installer dry-run
+        run: python3 scripts/install_overlays.py --destination /tmp/kimi-overlay-test --dry-run
+
+      - name: Validate Compose rendering
+        run: docker compose --env-file examples/.env.example -f examples/compose.yml config --quiet
+
+      - name: Check whitespace
+        run: git diff --check

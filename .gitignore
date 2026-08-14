@@ -1,0 +1,43 @@
+# Local credentials and environment
+.env
+.env.*
+!.env.example
+examples/.env
+
+# Runtime data and model/cache payloads
+deployment/
+runtime/
+models/
+cache/
+l2/
+tmp/
+*.safetensors
+*.gguf
+*.bin
+*.pt
+*.pth
+*.npy
+*.npz
+
+# Logs and generated probes
+*.log
+startup.log
+probe*.txt
+probe*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+*~
+
+# Installer backups
+*.bak.*

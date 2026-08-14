@@ -1,0 +1,24 @@
+Kimi K3 QSRT + LMCache compatibility overlay
+Copyright 2026 myshytf
+
+This product includes modified portions of LMCache:
+  https://github.com/LMCache/LMCache
+  Copyright the LMCache contributors
+  Licensed under the Apache License, Version 2.0.
+
+Unified vLLM 0.26 Mamba-cache compatibility is based in part on LMCache
+pull request #4206, merged as f1ab19a148bf666b79fc2ce0babdb67dd637b430:
+  https://github.com/LMCache/LMCache/pull/4206
+
+This product also includes a modified vLLM B12X MLA backend:
+  https://github.com/vllm-project/vllm
+  Copyright the vLLM contributors
+  Licensed under the Apache License, Version 2.0.
+
+All modified source files carry an SPDX identifier and a prominent
+modification notice. Exact upstream/tested versions and base-file SHA-256
+values are recorded in manifest.json.
+
+Kimi, Kimi K3, LMCache, vLLM, NVIDIA and other names may be trademarks of
+their respective owners. This project is an independent compatibility kit
+and is not endorsed by those projects or companies.

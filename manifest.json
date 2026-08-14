@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "project": "myshytf/kimi-k3-qsrt-lmcache",
+  "tested_environment": {
+    "date": "2026-08-14",
+    "container_image": "voipmonitor/vllm:infernal-invocation-vllm7ed814e-b12x5d648d9-fi1ac6942-cu133-torch213-20260813-r7",
+    "container_image_id": "sha256:58568d18ac87bf79095c758f5bc985f3b7a00d133819bf5bd47b935038f3f759",
+    "python": "3.12.3",
+    "torch": "2.13.0",
+    "vllm": "0.26.1rc0+infernal.invocation.cu133.r7.vllm7ed814e.b12x5d648d9",
+    "lmcache": "0.5.2+glm52dcp.5",
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition 96GB",
+    "gpu_count": 8,
+    "tensor_parallel_size": 8,
+    "dcp_size": 8,
+    "dcp_kv_cache_interleave_size": 1,
+    "model": "lukealonso/Kimi-K3-QSRT-K2",
+    "max_model_len": 200000,
+    "kv_cache_dtype": "fp8",
+    "scheduler_block_tokens": 1536,
+    "lmcache_chunk_tokens": 12288
+  },
+  "upstream": {
+    "lmcache_license": "Apache-2.0",
+    "lmcache_v0_5_3_commit": "140819c9d57a975dbc5678a6459a218e544cb58b",
+    "unified_kv_cache_pr": "https://github.com/LMCache/LMCache/pull/4206",
+    "unified_kv_cache_pr_merge_commit": "f1ab19a148bf666b79fc2ce0babdb67dd637b430"
+  },
+  "artifacts": [
+    {
+      "name": "launcher",
+      "component": "launcher",
+      "source": "launcher/serve-kimi-k3-qsrt-lmcache.sh",
+      "install_path": "patchwork/serve-kimi-k3-qsrt-lmcache.sh",
+      "container_path": "/usr/local/bin/serve-kimi-k3-qsrt.sh",
+      "base_sha256": "3750eba742542508ca65e5d23eac5a1100c41e4672e9e6b4bdcbcf9d37706714",
+      "patched_sha256": "c17c1e3d45d48f4e89107d378d149ba12c20c1f2966adb4ede529e80e6bac328"
+    },
+    {
+      "name": "lmcache-kv-cache-group-edits",
+      "component": "lmcache",
+      "source": "overlays/lmcache/integration/vllm/kv_cache_group_edits.py",
+      "install_path": "patchwork/lmcache/integration/vllm/kv_cache_group_edits.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/kv_cache_group_edits.py",
+      "base_sha256": "5f3fbd290f65bcdbcaf2b7da2948f735fbe1cc029a5ddb120dd5c66d1f544dd6",
+      "patched_sha256": "cdec6b1dbe8ae8815073d819d2df18ffef3a616494c543a9b2671d097c96c84d"
+    },
+    {
+      "name": "lmcache-mp-connector",
+      "component": "lmcache",
+      "source": "overlays/lmcache/integration/vllm/lmcache_mp_connector.py",
+      "install_path": "patchwork/lmcache/integration/vllm/lmcache_mp_connector.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/lmcache_mp_connector.py",
+      "base_sha256": "c6e0bf5c79e5b21a703ade532258514f4c2967626841ec1e9ca6eafa9d7ccae3",
+      "patched_sha256": "a2a4e34f861fc517dd43f197585a0dbec3236019739a95283b06ec420d38a2e6"
+    },
+    {
+      "name": "lmcache-gpu-connector-utils",
+      "component": "lmcache",
+      "source": "overlays/lmcache/v1/gpu_connector/utils.py",
+      "install_path": "patchwork/lmcache/v1/gpu_connector/utils.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/gpu_connector/utils.py",
+      "base_sha256": "592e12c38ef6d41de0c1ea6e408f66de5cb3c9481291055d44b74f9d1c45b3d8",
+      "patched_sha256": "d00eee25177aa70435bba5d4618f68a2973e8940fb4fe29c84c8afdaeb46604b"
+    },
+    {
+      "name": "lmcache-cuda-cache-context",
+      "component": "lmcache",
+      "source": "overlays/lmcache/v1/platform/cuda/cache_context.py",
+      "install_path": "patchwork/lmcache/v1/platform/cuda/cache_context.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/platform/cuda/cache_context.py",
+      "base_sha256": "5668ee8a7846d01e1007bda51c8eecb8a508d161ea0e08745f7d23e869aac000",
+      "patched_sha256": "51bed50104f1f50d3374eb9641942fd0ecc62d6b282516bde33e3ed54917d703"
+    },
+    {
+      "name": "vllm-b12x-mla-dcp8",
+      "component": "vllm-dcp",
+      "source": "overlays/vllm/v1/attention/backends/mla/b12x_mla.py",
+      "install_path": "patchwork/vllm/v1/attention/backends/mla/b12x_mla.py",
+      "container_path": "/opt/infernal-invocation/vllm/vllm/v1/attention/backends/mla/b12x_mla.py",
+      "base_sha256": "71a8342a58b6ee40396a63f17ada45c381630f078699502ea76ad1c2408c42ef",
+      "patched_sha256": "6955a490fcde8041312e3e0d17cfa4f0f322701037e56266019a404c7bda2393"
+    }
+  ]
+}
