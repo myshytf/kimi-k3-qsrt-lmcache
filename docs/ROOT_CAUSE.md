@@ -196,6 +196,51 @@ The server consequently owns no CUDA context, IPC mapping, GPU staging allocatio
 
 The production gate requires 8/8 registered non-CUDA contexts, no LMCache GPU process, successful short inference, deterministic L2 restore after recreate, external-token metrics, and a strict error scan. Zero VRAM attribution alone is not correctness proof.
 
+## Issue 6: complete recurrent aliases raced during H2D restore
+
+### Evidence boundary
+
+The persisted filesystem data was not corrupt. Rank/group/chunk SHA-256 probes showed that all 192 stored CPU payloads matched the corresponding restarted CPU payloads. The first divergence appeared only after scatter to GPU:
+
+```text
+MLA destinations:       48/48 payloads matched after H2D
+recurrent destinations: 144/144 recurrent payloads diverged after H2D
+```
+
+Historical align-mode recurrent snapshots mapped to one complete destination tuple, commonly `[0, 0, 0, 0, 0, 0]`. Submitting those snapshots in one scatter batch launched concurrent writes to the same physical state block. The final state depended on execution order even though the CPU source bytes were correct.
+
+### Fix and safety boundary
+
+Both pickle and SHM retrieve paths keep only the newest source snapshot when, and only when, the complete destination tuple is identical for every chunk, the geometry is complete, and no partial-token skip is active. Unique MLA/attention IDs, partial aliases, skewed mappings, and token-skipped restores remain unchanged.
+
+This transport fix is tracked in [divyvasal/LMCache#1](https://github.com/divyvasal/LMCache/pull/1), stacked on the multi-group feature from LMCache PR #4410.
+
+## Issue 7: recurrent state used attention-style DCP geometry
+
+### Evidence
+
+Serializing complete aliases changed the restored bytes but did not make restarted output equal to cold output. The block table localized the remaining loss before H2D:
+
+```text
+Mamba manager:  [null × 47, real tail]
+connector:      [null × 47, real tail]
+worker slice:   [null × 6]
+```
+
+vLLM's Mamba manager keeps DCP-replicated recurrent state: each DCP rank holds the complete state and one manager block spans only `block_size` tokens. LMCache had multiplied this span by `dcp_size` as it does for sequence-sharded attention KV. Request slicing therefore discarded the live tail and retained null placeholders.
+
+Align mode adds a second, coupled invariant. `mamba_cache_mode=align` has a finite one-block recurrent window across LMCache chunks; non-align Mamba does not. Correcting only the DCP span while leaving align mode unwindowed expanded one 73,728-token request from approximately 3.95 GB to 24.46 GB and caused the kernel to OOM-kill the LMCache child during restore.
+
+### Fix
+
+- Detect direct and uniform-wrapped Mamba specifications.
+- Keep Mamba `tokens_per_block` local under DCP.
+- Keep one physical recurrent block per manager block.
+- Expose `sw_size_tokens == block_size` only for align mode.
+- Preserve existing full-attention, sliding-window, MLA, partial-replication, and non-align behavior.
+
+The geometry fix is tracked in [local-inference-lab/LMCache#24](https://github.com/local-inference-lab/LMCache/pull/24). With both fixes, cold, same-process local, and restarted 73,728-token external-hit outputs are equivalent. A suffix-changed request restored 36,864 of 40,259 prompt tokens after restart.
+
 ## Why Compose validation did not catch this
 
 `docker compose config --quiet` validates YAML interpolation and structure. It cannot instantiate vLLM cache specifications, inspect tensor shapes, load the LMCache native extension, or compute DCP-aware tokens per block. All three fatal failures occur after the process enters model/engine initialization.

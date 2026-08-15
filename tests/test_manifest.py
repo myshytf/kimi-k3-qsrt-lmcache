@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifest.json"
@@ -24,9 +23,15 @@ class ManifestContractTests(unittest.TestCase):
         self.assertEqual(tested["lmcache_transfer_mode"], "engine_driven")
         self.assertEqual(tested["registered_non_cuda_contexts"], 8)
         self.assertEqual(tested["registered_gpu_contexts"], 0)
+        qualified = tested["recurrent_restore_qualification"]
+        self.assertEqual(qualified["max_model_len"], 372000)
+        self.assertEqual(qualified["kv_cache_memory_bytes_per_rank"], 1610612736)
+        self.assertEqual(qualified["l2_reset_policy"], "auto")
+        self.assertEqual(qualified["full_external_hit_tokens"], 73728)
+        self.assertEqual(qualified["partial_external_hit_tokens"], 36864)
 
         artifacts = data["artifacts"]
-        self.assertEqual(len(artifacts), 18)
+        self.assertEqual(len(artifacts), 19)
         self.assertEqual(
             {artifact["component"] for artifact in artifacts},
             {"launcher", "lmcache", "vllm-dcp"},

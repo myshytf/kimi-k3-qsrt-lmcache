@@ -171,13 +171,14 @@ The 12,288-token hit is exactly one DCP-aware LMCache chunk.
 
 Cache hits are useful only if the output remains correct. At minimum:
 
-1. send a deterministic factual prompt on a full miss,
-2. repeat after an L2-preserving restart,
-3. compare the answer and token usage,
-4. exercise several shared-prefix requests with different suffixes,
-5. inspect for corruption, missing suffix attention or cross-request leakage.
+1. send a deterministic salted prompt on a full miss and retain its normalized request,
+2. replay it in the same process and distinguish vLLM APC from a genuine LMCache local hit,
+3. restart with L2 preserved and replay the exact normalized request,
+4. require an external-hit increase and compare reasoning, content, tool calls, finish reason, and usage,
+5. change only the suffix and require a partial hit (`0 < hit_tokens < prompt_tokens`),
+6. inspect for corruption, missing suffix attention, or cross-request leakage.
 
-Do not rely only on throughput or hit counters. Hybrid cache layout mistakes can produce plausible but incorrect text.
+Do not rely only on throughput, fluent text, or hit counters. Hybrid cache layout mistakes can produce plausible text while diverging at the first generated token. Compare canonical parsed response fields rather than raw SSE framing.
 
 ## Gate 7: strict error scan
 
@@ -220,3 +221,21 @@ After all checks pass, perform one normal Compose recreate and repeat:
 - strict error scan.
 
 This catches patches that were applied interactively inside a container but not persisted as bind mounts.
+
+When `K3_LMCACHE_RESET_L2_ON_START=auto`, also require the layout guard to report `preserve-compatible` and verify that the retained inventory belongs to the current layout fingerprint. A geometry-changing deployment must increment the layout revision so incompatible token-hash-keyed objects are removed once, before the new canonical store.
+
+## Gate 10: gateway continuation and concurrency
+
+The direct vLLM probe does not validate an agent gateway. Through the production gateway:
+
+1. require one tool call with progressive JSON argument deltas,
+2. append the assistant reasoning/tool call and the tool result,
+3. require a second tool call and append its result,
+4. require a final tool-free answer without changing the tool schema,
+5. run two forced-tool requests concurrently and observe two running sequences.
+
+Validate tool names, call IDs, reconstructed JSON, finish reasons, and completed client streams. An aggregate `num_requests_running=1` after the canary is not by itself a leak: correlate gateway request IDs, user agents, request sizes/hashes, and timestamps before attributing unrelated live traffic.
+
+## Gate 11: immutable cutover
+
+Diagnostic bind mounts are not the final product. Bake qualified code into a digest-pinned image, verify source hashes during the build, and remove checksum/dev/reset overrides from the running container. The final mount set should contain only model, cache, temporary-data, and persistent-L2 data paths. Preserve the pre-cutover Compose as a rollback artifact rather than leaving it active.

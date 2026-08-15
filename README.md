@@ -2,14 +2,14 @@
 
 A reproducible, fail-closed compatibility kit for serving **Kimi K3 QSRT** with a vLLM 0.26 hybrid KV cache and an LMCache 0.5.2-derived multiprocess cache server.
 
-This repository documents and packages the exact overlay that recovered an 8-GPU TP8/DCP8 deployment which failed at engine initialization after LMCache was enabled. It now also backports multi-group engine-driven transfer so the standalone LMCache server is CPU-only while the existing vLLM workers perform GPU gather/scatter.
+This repository documents and packages the exact overlay that recovered an 8-GPU TP8/DCP8 deployment which failed at engine initialization after LMCache was enabled. It also backports multi-group engine-driven transfer, keeps the standalone LMCache server CPU-only, and preserves recurrent Mamba/KDA state across persistent external-cache restores.
 
 > [!IMPORTANT]
 > This is a narrow backport for the exact image and package builds in [`manifest.json`](manifest.json), not a universal patch for arbitrary vLLM or LMCache releases. Run `scripts/check_image.py` before mounting any overlay. A base-file hash mismatch is a stop condition, not a warning to ignore.
 
 ## What was broken
 
-Five separate problems appeared in sequence:
+Seven separate problems appeared in sequence:
 
 | Stage | Symptom | Root cause | Fix |
 |---|---|---|---|
@@ -18,12 +18,14 @@ Five separate problems appeared in sequence:
 | 3 | `chunk_size (1536) must be a multiple of ... tokens_per_block (12288)` | 1536 is the rank-local scheduler step, but LMCache sees a DCP-aware global block | Keep `max_num_batched_tokens=1536`; set LMCache chunk to `1536 × 8 = 12288` |
 | 4 | LMCache server showed about 960 MiB on every GPU | Pointer mode allocated four reusable staging chunks per rank in addition to CUDA IPC mappings | Make staging batch configurable and set it to one chunk as a pointer-mode fallback |
 | 5 | Stock `engine_driven` rejected Kimi K3's four object groups and DCP8 cache geometry | The installed implementation supported one layout and treated the logical 12,288-token chunk as physical 12,288-token rank-local blocks | Backport LMCache PR #4410's multi-group protocol, then adapt each rank to 1,536 physical blocks while preserving 12,288-token logical objects |
+| 6 | Restarted external hits had byte-correct CPU payloads but divergent model output | Historical recurrent snapshots were scattered concurrently to one aliased physical destination | Collapse only complete, geometry-valid aliases to the newest snapshot in both pickle and SHM paths |
+| 7 | Alias serialization changed the output but did not restore cold equivalence | LMCache scaled DCP-replicated Mamba state as sequence-sharded KV and did not expose align mode's one-block tail window | Preserve the local Mamba block span and apply a finite window only to `mamba_cache_mode=align` |
 
 Read the complete failure chain in [docs/ROOT_CAUSE.md](docs/ROOT_CAUSE.md).
 
 ## Validated result
 
-Validated on 2026-08-14:
+Validated through 2026-08-16:
 
 - Model: [`lukealonso/Kimi-K3-QSRT-K2`](https://huggingface.co/lukealonso/Kimi-K3-QSRT-K2)
 - GPUs: 8 × NVIDIA RTX PRO 6000 Blackwell Max-Q 96 GB
@@ -31,8 +33,8 @@ Validated on 2026-08-14:
 - vLLM: `0.26.1rc0+infernal.invocation.cu133.r7.vllm7ed814e.b12x5d648d9`
 - LMCache: `0.5.2+glm52dcp.5`
 - Python 3.12.3, PyTorch 2.13.0
-- FP8 KV, `max_model_len=420000`, `max_num_seqs=2`
-- Active vLLM KV reservation: 2 GiB per rank
+- Original capacity profile: FP8 KV, `max_model_len=420000`, 2 GiB/rank, `max_num_seqs=2`
+- Recurrent-restore qualification profile: FP8 KV, `max_model_len=372000`, 1.5 GiB/rank, `max_num_seqs=2`
 - LMCache: 48 GB host-RAM L1 + `fs_native`/O_DIRECT L2
 - Transfer: multi-group `engine_driven`; standalone LMCache server has no GPU visibility
 
@@ -51,6 +53,9 @@ Observed validation:
 | GPU KV capacity / 420K concurrency | 1,034,634 tokens / 2.46× |
 | Free VRAM after long external restore | 613–693 MiB/GPU |
 | Persistent external restore in engine-driven mode | 12,288 / 22,090 tokens (55.6%) |
+| Full restarted recurrent-state restore | 73,728 external tokens; cold/local/restarted semantic hashes equal |
+| Partial restarted external restore | 36,864 / 40,259 prompt tokens; 46.0 s cold → 10.6 s restore |
+| Gateway continuation | Two tool rounds plus final answer; concurrent forced-tool streams pass |
 
 The pointer-mode process row included a shared CUDA IPC mapping and was not entirely independent physical allocation. Engine-driven mode removes the mapping, staging buffer, block-ID workspace, and standalone CUDA context together. See [docs/VRAM_ACCOUNTING.md](docs/VRAM_ACCOUNTING.md).
 
@@ -59,7 +64,7 @@ The pointer-mode process row included a shared CUDA IPC mapping and was not enti
 ```text
 manifest.json                       Exact tested versions, paths and hashes
 launcher/                           LMCache-aware Kimi K3 QSRT launcher
-overlays/lmcache/                   Fourteen hash-qualified LMCache overlays
+overlays/lmcache/                   Seventeen hash-qualified LMCache overlays
 overlays/vllm/                      Tested B12X MLA DCP8 prerequisite overlay
 examples/compose.yml                Credential-free TP8/DCP8 Compose example
 examples/.env.example               Host-specific values to configure
