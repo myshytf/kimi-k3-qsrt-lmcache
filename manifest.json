@@ -37,7 +37,9 @@
     "unified_kv_cache_pr": "https://github.com/LMCache/LMCache/pull/4206",
     "unified_kv_cache_pr_merge_commit": "f1ab19a148bf666b79fc2ce0babdb67dd637b430",
     "hybrid_engine_driven_pr": "https://github.com/LMCache/LMCache/pull/4410",
-    "hybrid_engine_driven_pr_head_commit": "0cc4b50d2ff67d79fd29d36ef2467dbb1af4f7f5"
+    "hybrid_engine_driven_pr_head_commit": "0cc4b50d2ff67d79fd29d36ef2467dbb1af4f7f5",
+    "hybrid_cross_tp_pr": "https://github.com/LMCache/LMCache/pull/4219",
+    "hybrid_cross_tp_pr_head_commit": "8458a80b3cd923ff43213b1b3e7c4927879b489b"
   },
   "artifacts": [
     {
@@ -65,7 +67,25 @@
       "install_path": "patchwork/lmcache/integration/vllm/lmcache_mp_connector.py",
       "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/lmcache_mp_connector.py",
       "base_sha256": "c6e0bf5c79e5b21a703ade532258514f4c2967626841ec1e9ca6eafa9d7ccae3",
-      "patched_sha256": "a2a4e34f861fc517dd43f197585a0dbec3236019739a95283b06ec420d38a2e6"
+      "patched_sha256": "b9d5f1e45c799d7a204170c65bb7ad28b963cfdded6700e4254bf0ab7128f05d"
+    },
+    {
+      "name": "lmcache-vllm-utils",
+      "component": "lmcache",
+      "source": "overlays/lmcache/integration/vllm/utils.py",
+      "install_path": "patchwork/lmcache/integration/vllm/utils.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/utils.py",
+      "base_sha256": "35e20b6dbc094ac7cc40eea2770bc1007eb6f9a5f815b7c70c1c5630c9a37204",
+      "patched_sha256": "e38e85e8a4782511888a1a5ba77813b23df4419ffe0dfd51d7d9ecc63e72c2fb"
+    },
+    {
+      "name": "lmcache-vllm-multi-process-adapter",
+      "component": "lmcache",
+      "source": "overlays/lmcache/integration/vllm/vllm_multi_process_adapter.py",
+      "install_path": "patchwork/lmcache/integration/vllm/vllm_multi_process_adapter.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/vllm_multi_process_adapter.py",
+      "base_sha256": "90803d050cf27733581025677d75eeb584d3cbd635ec4f14e77f74f31e2203a9",
+      "patched_sha256": "de0c31bf63cc6bef19bd7952662a143c942af8ebe86d265b78274dff74c70325"
     },
     {
       "name": "lmcache-gpu-connector-utils",

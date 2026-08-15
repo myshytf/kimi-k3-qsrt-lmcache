@@ -46,7 +46,7 @@ class RepositoryContractTests(unittest.TestCase):
 
     def test_compose_uses_read_only_overlays_and_keeps_hybrid_manager(self) -> None:
         text = (ROOT / "examples" / "compose.yml").read_text(encoding="utf-8")
-        self.assertEqual(text.count("- ./patchwork/"), 16)
+        self.assertEqual(text.count("- ./patchwork/"), 18)
         manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
         for artifact in manifest["artifacts"]:
             mount = (

@@ -26,7 +26,7 @@ class ManifestContractTests(unittest.TestCase):
         self.assertEqual(tested["registered_gpu_contexts"], 0)
 
         artifacts = data["artifacts"]
-        self.assertEqual(len(artifacts), 16)
+        self.assertEqual(len(artifacts), 18)
         self.assertEqual(
             {artifact["component"] for artifact in artifacts},
             {"launcher", "lmcache", "vllm-dcp"},

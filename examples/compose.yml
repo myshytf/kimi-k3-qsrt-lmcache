@@ -83,6 +83,8 @@ services:
       - ./patchwork/serve-kimi-k3-qsrt-lmcache.sh:/usr/local/bin/serve-kimi-k3-qsrt.sh:ro
       - ./patchwork/lmcache/integration/vllm/kv_cache_group_edits.py:/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/kv_cache_group_edits.py:ro
       - ./patchwork/lmcache/integration/vllm/lmcache_mp_connector.py:/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/lmcache_mp_connector.py:ro
+      - ./patchwork/lmcache/integration/vllm/utils.py:/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/utils.py:ro
+      - ./patchwork/lmcache/integration/vllm/vllm_multi_process_adapter.py:/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/vllm_multi_process_adapter.py:ro
       - ./patchwork/lmcache/v1/gpu_connector/utils.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/gpu_connector/utils.py:ro
       - ./patchwork/lmcache/v1/platform/cuda/cache_context.py:/opt/venv/lib/python3.12/site-packages/lmcache/v1/platform/cuda/cache_context.py:ro
       # Multi-group engine-driven transfer plus Kimi K3 DCP8 geometry.
