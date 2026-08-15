@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import hashlib
 import json
-from pathlib import Path
 import re
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -40,31 +38,38 @@ class RepositoryContractTests(unittest.TestCase):
             "chunk_size (1536) must be a multiple of",
             "1536 × 8 = 12288",
             "stock engine-driven transfer could not serve Kimi K3",
+            "144/144 recurrent payloads",
+            "DCP-replicated recurrent state",
         ]
         for phrase in required:
             self.assertIn(phrase, text)
 
     def test_compose_uses_read_only_overlays_and_keeps_hybrid_manager(self) -> None:
         text = (ROOT / "examples" / "compose.yml").read_text(encoding="utf-8")
-        self.assertEqual(text.count("- ./patchwork/"), 18)
+        self.assertEqual(text.count("- ./patchwork/"), 19)
         manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
         for artifact in manifest["artifacts"]:
-            mount = (
-                f"- ./{artifact['install_path']}:{artifact['container_path']}:ro"
-            )
+            mount = f"- ./{artifact['install_path']}:{artifact['container_path']}:ro"
             self.assertIn(mount, text, artifact["name"])
         self.assertIn("K3_LMCACHE_CHUNK_SIZE: ${K3_LMCACHE_CHUNK_SIZE:-12288}", text)
         self.assertIn("K3_MAX_MODEL_LEN: ${K3_MAX_MODEL_LEN:-420000}", text)
-        self.assertIn("K3_KV_CACHE_MEMORY_BYTES: ${K3_KV_CACHE_MEMORY_BYTES:-2147483648}", text)
-        self.assertIn("K3_LMCACHE_TRANSFER_MODE: ${K3_LMCACHE_TRANSFER_MODE:-engine_driven}", text)
-        self.assertIn('K3_LMCACHE_SERVER_ENV: "CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY"', text)
+        self.assertIn(
+            "K3_KV_CACHE_MEMORY_BYTES: ${K3_KV_CACHE_MEMORY_BYTES:-2147483648}", text
+        )
+        self.assertIn(
+            "K3_LMCACHE_TRANSFER_MODE: ${K3_LMCACHE_TRANSFER_MODE:-engine_driven}", text
+        )
+        self.assertIn(
+            'K3_LMCACHE_SERVER_ENV: "CUDA_VISIBLE_DEVICES= CUDA_MODULE_LOADING=LAZY"',
+            text,
+        )
         self.assertNotIn("--disable-hybrid-kv-cache-manager", text)
         self.assertNotIn("/home/" + "g0san", text)
 
     def test_launcher_keeps_required_hybrid_settings(self) -> None:
-        text = (
-            ROOT / "launcher" / "serve-kimi-k3-qsrt-lmcache.sh"
-        ).read_text(encoding="utf-8")
+        text = (ROOT / "launcher" / "serve-kimi-k3-qsrt-lmcache.sh").read_text(
+            encoding="utf-8"
+        )
         self.assertNotIn("--disable-hybrid-kv-cache-manager", text)
         self.assertIn("--separate-object-groups", text)
         self.assertIn('--supported-transfer-mode "${K3_LMCACHE_TRANSFER_MODE}"', text)
@@ -77,7 +82,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('env "${K3_LMCACHE_SERVER_ENV_ARGS[@]}"', text)
         self.assertNotIn("env ${K3_LMCACHE_SERVER_ENV}", text)
 
-    def test_repository_contains_no_live_credentials_or_private_host_paths(self) -> None:
+    def test_repository_contains_no_live_credentials_or_private_host_paths(
+        self,
+    ) -> None:
         patterns = {
             "hugging-face token": re.compile(r"hf_[A-Za-z0-9]{20,}"),
             "OpenAI-style secret": re.compile(r"sk-[A-Za-z0-9_-]{20,}"),

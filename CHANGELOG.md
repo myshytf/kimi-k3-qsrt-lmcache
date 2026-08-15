@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.0] - 2026-08-16
+
+### Fixed
+
+- Complete recurrent destination aliases now restore only the newest logical snapshot in both pickle and SHM engine-driven paths, preventing concurrent H2D writes to one physical block.
+- Mamba/KDA recurrent cache geometry now remains DCP-replicated instead of being expanded as sequence-sharded attention KV.
+- `mamba_cache_mode=align` exposes a one-block tail window; non-align Mamba and attention groups retain their existing semantics.
+
+### Added
+
+- Hash-qualified `kv_cache_groups.py` overlay and focused direct/uniform/nested Mamba geometry tests.
+- Regression coverage for complete aliases, partial aliases, token skips, invalid geometry, and unique attention destinations.
+- Immutable image, layout fingerprint, upstream PR, and restarted L2 qualification provenance in `manifest.json`.
+- Corrected the stale base-image hash for `vllm_multi_process_adapter.py`; the manifest now matches the pinned image ID's actual file bytes.
+
+### Validated
+
+- Cold, same-process local, and 73,728-token restarted external outputs are equivalent.
+- A suffix-changed request restored 36,864 of 40,259 prompt tokens after restart.
+- Two-round tool continuation and two simultaneous forced-tool streams passed through the 5318 gateway.
+- The qualified immutable container remained running with restart count 0 and `OOMKilled=false`.
+
 ## [0.2.1] - 2026-08-14
 
 ### Fixed

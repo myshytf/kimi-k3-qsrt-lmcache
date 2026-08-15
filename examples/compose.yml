@@ -82,6 +82,7 @@ services:
       # Immutable, reviewable source overlays. The image is not modified.
       - ./patchwork/serve-kimi-k3-qsrt-lmcache.sh:/usr/local/bin/serve-kimi-k3-qsrt.sh:ro
       - ./patchwork/lmcache/integration/vllm/kv_cache_group_edits.py:/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/kv_cache_group_edits.py:ro
+      - ./patchwork/lmcache/integration/vllm/kv_cache_groups.py:/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/kv_cache_groups.py:ro
       - ./patchwork/lmcache/integration/vllm/lmcache_mp_connector.py:/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/lmcache_mp_connector.py:ro
       - ./patchwork/lmcache/integration/vllm/utils.py:/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/utils.py:ro
       - ./patchwork/lmcache/integration/vllm/vllm_multi_process_adapter.py:/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/vllm_multi_process_adapter.py:ro

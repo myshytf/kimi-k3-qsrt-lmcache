@@ -29,7 +29,20 @@
     "lmcache_chunk_tokens": 12288,
     "lmcache_transfer_mode": "engine_driven",
     "registered_non_cuda_contexts": 8,
-    "registered_gpu_contexts": 0
+    "registered_gpu_contexts": 0,
+    "recurrent_restore_qualification": {
+      "date": "2026-08-16",
+      "immutable_image": "g0san94/kimi-k3-qsrt-lmcache@sha256:c8c61da08389bac38b99b5d723774b0eb941d5facc2233712bafe470e1989ff7",
+      "image_id": "sha256:c8c61da08389bac38b99b5d723774b0eb941d5facc2233712bafe470e1989ff7",
+      "source_commit": "099caad2",
+      "max_model_len": 372000,
+      "kv_cache_memory_bytes_per_rank": 1610612736,
+      "l2_reset_policy": "auto",
+      "layout_revision": "mamba-cow-mla-only-v4-mamba-dcp-tail-window",
+      "full_external_hit_tokens": 73728,
+      "partial_external_hit_tokens": 36864,
+      "partial_prompt_tokens": 40259
+    }
   },
   "upstream": {
     "lmcache_license": "Apache-2.0",
@@ -39,7 +52,11 @@
     "hybrid_engine_driven_pr": "https://github.com/LMCache/LMCache/pull/4410",
     "hybrid_engine_driven_pr_head_commit": "0cc4b50d2ff67d79fd29d36ef2467dbb1af4f7f5",
     "hybrid_cross_tp_pr": "https://github.com/LMCache/LMCache/pull/4219",
-    "hybrid_cross_tp_pr_head_commit": "8458a80b3cd923ff43213b1b3e7c4927879b489b"
+    "hybrid_cross_tp_pr_head_commit": "8458a80b3cd923ff43213b1b3e7c4927879b489b",
+    "mamba_dcp_geometry_pr": "https://github.com/local-inference-lab/LMCache/pull/24",
+    "mamba_dcp_geometry_commit": "31ca93b2240ca61b5ca85549021c268f90f73d29",
+    "recurrent_alias_pr": "https://github.com/divyvasal/LMCache/pull/1",
+    "recurrent_alias_commit": "892da49f1bfcea0af6851d4ef90f23b251c29727"
   },
   "artifacts": [
     {
@@ -59,6 +76,15 @@
       "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/kv_cache_group_edits.py",
       "base_sha256": "5f3fbd290f65bcdbcaf2b7da2948f735fbe1cc029a5ddb120dd5c66d1f544dd6",
       "patched_sha256": "cdec6b1dbe8ae8815073d819d2df18ffef3a616494c543a9b2671d097c96c84d"
+    },
+    {
+      "name": "lmcache-kv-cache-groups",
+      "component": "lmcache",
+      "source": "overlays/lmcache/integration/vllm/kv_cache_groups.py",
+      "install_path": "patchwork/lmcache/integration/vllm/kv_cache_groups.py",
+      "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/kv_cache_groups.py",
+      "base_sha256": "df0f30d044aa3ee6c2d867d942a43e3a36a8f44d8050d71666ab4a68cbca9e9b",
+      "patched_sha256": "811b66c2613d8a741c113f527b2ee47f3f4c267a11af460d749c98b0818eb779"
     },
     {
       "name": "lmcache-mp-connector",
@@ -84,7 +110,7 @@
       "source": "overlays/lmcache/integration/vllm/vllm_multi_process_adapter.py",
       "install_path": "patchwork/lmcache/integration/vllm/vllm_multi_process_adapter.py",
       "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/integration/vllm/vllm_multi_process_adapter.py",
-      "base_sha256": "90803d050cf27733581025677d75eeb584d3cbd635ec4f14e77f74f31e2203a9",
+      "base_sha256": "ea580badefb9a0fad5fa2ac1bdcff4f2b36fc85138d95a5be4b180f07dd2c874",
       "patched_sha256": "de0c31bf63cc6bef19bd7952662a143c942af8ebe86d265b78274dff74c70325"
     },
     {
@@ -192,7 +218,7 @@
       "source": "overlays/lmcache/v1/multiprocess/transfer_context/worker_transfer.py",
       "install_path": "patchwork/lmcache/v1/multiprocess/transfer_context/worker_transfer.py",
       "container_path": "/opt/venv/lib/python3.12/site-packages/lmcache/v1/multiprocess/transfer_context/worker_transfer.py",
-      "patched_sha256": "356ccd5412526256c3a533dc4e4f885aef9ff1ea3f84ba5b9d6661587074730f",
+      "patched_sha256": "fc46ae1651a39ff1a9140ac66fafbeb254b028bb79632c02d19a38762c87a7a4",
       "base_sha256": "4e851a51d799bb9e33a7444bec1fc1be7a20082af6260877e6945c411992fe0e"
     },
     {
